@@ -73,10 +73,23 @@ export interface KnowledgeSyncConfig {
   peers?: string[];          // Specific peers to sync with (default: all)
 }
 
+// Memory TTL configuration
+export interface MemoryTTLConfig {
+  enabled?: boolean;            // Enable TTL enforcement (default: false)
+  cleanupInterval?: number;     // Cleanup interval in ms (default: 3600000 = 1 hour)
+  defaultTTL?: {                // Default TTL per category in ms
+    learning?: number;          // Default: 30 days
+    solution?: number;          // Default: 90 days (solutions are valuable longer)
+    observation?: number;       // Default: 7 days
+    note?: number;              // Default: 14 days
+  };
+}
+
 export interface SchedulerConfig {
   enabled?: boolean;         // Master switch (default: false)
   tasks?: ScheduledTask[];   // List of scheduled tasks
   knowledgeSync?: KnowledgeSyncConfig;  // Automatic knowledge sync config
+  memoryTTL?: MemoryTTLConfig;          // Memory expiry and cleanup config
 }
 
 export interface ServerConfig {
@@ -300,6 +313,28 @@ export function getKnowledgeSyncConfig(): KnowledgeSyncConfig {
 }
 
 /**
+ * Get memory TTL configuration with defaults
+ */
+export function getMemoryTTLConfig(): MemoryTTLConfig & { defaultTTL: Required<MemoryTTLConfig['defaultTTL']> } {
+  const config = loadConfig();
+  const ttlConfig = config.server?.scheduler?.memoryTTL || {};
+
+  // Default TTLs in milliseconds
+  const DAY = 24 * 60 * 60 * 1000;
+
+  return {
+    enabled: ttlConfig.enabled ?? false,
+    cleanupInterval: ttlConfig.cleanupInterval ?? 60 * 60 * 1000, // 1 hour
+    defaultTTL: {
+      learning: ttlConfig.defaultTTL?.learning ?? 30 * DAY,      // 30 days
+      solution: ttlConfig.defaultTTL?.solution ?? 90 * DAY,      // 90 days
+      observation: ttlConfig.defaultTTL?.observation ?? 7 * DAY, // 7 days
+      note: ttlConfig.defaultTTL?.note ?? 14 * DAY,              // 14 days
+    },
+  };
+}
+
+/**
  * Get MCP servers configuration
  */
 export function getMCPServersConfig(): Record<string, MCPServerConfig> {
@@ -505,7 +540,21 @@ export function createTemplateConfig(): void {
               prompt: "I'm getting busy over here - can you help with some analysis?"
             }
           }
-        ]
+        ],
+        knowledgeSync: {
+          enabled: true,           // Enable automatic knowledge sync
+          interval: 300000         // Sync every 5 minutes
+        },
+        memoryTTL: {
+          enabled: true,           // Enable memory expiry
+          cleanupInterval: 3600000, // Cleanup every hour
+          defaultTTL: {
+            learning: 2592000000,  // 30 days
+            solution: 7776000000,  // 90 days
+            observation: 604800000, // 7 days
+            note: 1209600000       // 14 days
+          }
+        }
       },
       tls: {
         cert: "~/.config/ai/certs/server.pem",

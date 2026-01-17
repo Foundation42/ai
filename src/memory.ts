@@ -1,7 +1,7 @@
 import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { ensureConfigDir } from './config';
+import { ensureConfigDir, getMemoryTTLConfig } from './config';
 
 const MEMORY_PATH = join(homedir(), '.config', 'ai', 'memory.json');
 const SYNC_STATE_PATH = join(homedir(), '.config', 'ai', 'memory-sync.json');
@@ -60,9 +60,31 @@ export function writeMemory(params: {
   content: string;
   tags?: string[];
   context?: string;
-  ttl?: number;
+  ttl?: number;        // Explicit TTL timestamp (absolute)
+  ttlDuration?: number; // TTL duration in ms from now
+  noExpiry?: boolean;   // Set to true to never expire
 }): Memory {
   const store = loadMemoryStore();
+  const ttlConfig = getMemoryTTLConfig();
+  const now = Date.now();
+
+  // Determine TTL
+  let expiryTime: number | undefined;
+
+  if (params.noExpiry) {
+    // Explicitly no expiry
+    expiryTime = undefined;
+  } else if (params.ttl) {
+    // Explicit TTL timestamp
+    expiryTime = params.ttl;
+  } else if (params.ttlDuration) {
+    // TTL duration from now
+    expiryTime = now + params.ttlDuration;
+  } else if (ttlConfig.enabled) {
+    // Apply default TTL based on category
+    const defaultDuration = ttlConfig.defaultTTL[params.category];
+    expiryTime = now + defaultDuration;
+  }
 
   const memory: Memory = {
     id: generateId(),
@@ -70,10 +92,10 @@ export function writeMemory(params: {
     title: params.title,
     content: params.content,
     tags: params.tags || [],
-    created: Date.now(),
+    created: now,
     source: 'local',
     context: params.context,
-    ttl: params.ttl,
+    ttl: expiryTime,
   };
 
   store.memories.push(memory);
@@ -410,4 +432,113 @@ export function getSyncStats(): { peers: Record<string, { lastSync: string; sync
   }
 
   return { peers: stats };
+}
+
+// ============================================
+// Memory Cleanup
+// ============================================
+
+export interface CleanupResult {
+  localExpired: number;
+  sharedExpired: number;
+  totalRemaining: number;
+}
+
+/**
+ * Clean up expired memories from local and shared stores
+ */
+export function cleanupExpiredMemories(): CleanupResult {
+  const store = loadMemoryStore();
+  const now = Date.now();
+
+  const originalLocalCount = store.memories.length;
+  const originalSharedCount = Object.values(store.shared).reduce((sum, arr) => sum + arr.length, 0);
+
+  // Filter out expired local memories
+  store.memories = store.memories.filter(m => !m.ttl || m.ttl > now);
+
+  // Filter out expired shared memories
+  for (const peerName of Object.keys(store.shared)) {
+    store.shared[peerName] = store.shared[peerName].filter(m => !m.ttl || m.ttl > now);
+
+    // Remove empty peer entries
+    if (store.shared[peerName].length === 0) {
+      delete store.shared[peerName];
+    }
+  }
+
+  const localExpired = originalLocalCount - store.memories.length;
+  const newSharedCount = Object.values(store.shared).reduce((sum, arr) => sum + arr.length, 0);
+  const sharedExpired = originalSharedCount - newSharedCount;
+
+  // Save if any changes were made
+  if (localExpired > 0 || sharedExpired > 0) {
+    saveMemoryStore(store);
+  }
+
+  return {
+    localExpired,
+    sharedExpired,
+    totalRemaining: store.memories.length + newSharedCount,
+  };
+}
+
+/**
+ * Get memory statistics for API
+ */
+export function getMemoryStats(): {
+  local: { total: number; byCategory: Record<string, number>; expiring: { soon: number; thisWeek: number } };
+  shared: { total: number; byPeer: Record<string, number> };
+  ttlEnabled: boolean;
+} {
+  const store = loadMemoryStore();
+  const ttlConfig = getMemoryTTLConfig();
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+
+  // Count by category
+  const byCategory: Record<string, number> = {
+    learning: 0,
+    solution: 0,
+    observation: 0,
+    note: 0,
+  };
+  for (const m of store.memories) {
+    byCategory[m.category]++;
+  }
+
+  // Count expiring memories
+  let expiringSoon = 0; // Within 24 hours
+  let expiringThisWeek = 0; // Within 7 days
+  for (const m of store.memories) {
+    if (m.ttl) {
+      const timeLeft = m.ttl - now;
+      if (timeLeft > 0 && timeLeft <= DAY) expiringSoon++;
+      if (timeLeft > 0 && timeLeft <= 7 * DAY) expiringThisWeek++;
+    }
+  }
+
+  // Count shared by peer
+  const byPeer: Record<string, number> = {};
+  let sharedTotal = 0;
+  for (const [peerName, memories] of Object.entries(store.shared)) {
+    byPeer[peerName] = memories.length;
+    sharedTotal += memories.length;
+  }
+
+  return {
+    local: {
+      total: store.memories.length,
+      byCategory,
+      expiring: {
+        soon: expiringSoon,
+        thisWeek: expiringThisWeek,
+      },
+    },
+    shared: {
+      total: sharedTotal,
+      byPeer,
+    },
+    ttlEnabled: ttlConfig.enabled,
+  };
 }

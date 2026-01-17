@@ -1417,6 +1417,71 @@ Example logs:
    node2: Sent 3, received 0
 ```
 
+### Memory TTL and Cleanup
+
+Memories can automatically expire to keep storage manageable. Configure TTL per category:
+
+```json
+{
+  "server": {
+    "scheduler": {
+      "enabled": true,
+      "memoryTTL": {
+        "enabled": true,
+        "cleanupInterval": 3600000,
+        "defaultTTL": {
+          "learning": 2592000000,
+          "solution": 7776000000,
+          "observation": 604800000,
+          "note": 1209600000
+        }
+      }
+    }
+  }
+}
+```
+
+Default TTLs (when enabled):
+
+| Category | Default TTL | Use Case |
+|----------|-------------|----------|
+| `solution` | 90 days | Valuable fixes worth keeping |
+| `learning` | 30 days | General knowledge |
+| `note` | 14 days | Temporary information |
+| `observation` | 7 days | Short-term patterns |
+
+Override TTL when saving:
+
+```bash
+# Save with custom expiry
+ai "Save this as a permanent solution that never expires"
+# Uses noExpiry: true
+
+ai "Remember this for 60 days as a learning"
+# Uses ttlDays: 60
+```
+
+Memory statistics in scheduler API:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/v1/scheduler | jq '.memory'
+```
+
+```json
+{
+  "local": {
+    "total": 42,
+    "byCategory": { "solution": 15, "learning": 20, "note": 5, "observation": 2 },
+    "expiring": { "soon": 1, "thisWeek": 5 }
+  },
+  "shared": {
+    "total": 12,
+    "byPeer": { "node2": 7, "node3": 5 }
+  },
+  "ttlEnabled": true
+}
+```
+
 ## systemd Integration
 
 For production deployments, run fleet nodes as systemd services:

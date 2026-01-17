@@ -24,7 +24,8 @@ export class MemoryWriteTool implements Tool {
 - Observations: Notable patterns or behaviors
 - Notes: General information worth remembering
 
-The memory will be stored locally and can be shared with peers.`,
+The memory will be stored locally and can be shared with peers.
+Memories expire based on category defaults (solutions: 90d, learnings: 30d, notes: 14d, observations: 7d) unless noExpiry is set.`,
     parameters: {
       type: 'object',
       properties: {
@@ -50,6 +51,14 @@ The memory will be stored locally and can be shared with peers.`,
           type: 'string',
           description: 'Optional context (e.g., "fixing nginx 502 errors")',
         },
+        ttlDays: {
+          type: 'number',
+          description: 'Days until memory expires (overrides default)',
+        },
+        noExpiry: {
+          type: 'boolean',
+          description: 'Set to true for permanent memories that never expire',
+        },
       },
       required: ['category', 'title', 'content'],
     },
@@ -61,6 +70,8 @@ The memory will be stored locally and can be shared with peers.`,
     const content = String(args.content || '');
     const tags = (args.tags as string[]) || [];
     const context = args.context ? String(args.context) : undefined;
+    const ttlDays = args.ttlDays as number | undefined;
+    const noExpiry = args.noExpiry as boolean | undefined;
 
     if (!title || !content) {
       return 'Error: title and content are required';
@@ -72,9 +83,19 @@ The memory will be stored locally and can be shared with peers.`,
       content,
       tags: tags.map(t => t.toLowerCase()),
       context,
+      ttlDuration: ttlDays ? ttlDays * 24 * 60 * 60 * 1000 : undefined,
+      noExpiry,
     });
 
-    return `Memory saved: "${memory.title}" (${memory.id})`;
+    let expiryInfo = '';
+    if (memory.ttl) {
+      const daysLeft = Math.ceil((memory.ttl - Date.now()) / (24 * 60 * 60 * 1000));
+      expiryInfo = `, expires in ${daysLeft} days`;
+    } else {
+      expiryInfo = ', never expires';
+    }
+
+    return `Memory saved: "${memory.title}" (${memory.id}${expiryInfo})`;
   }
 }
 

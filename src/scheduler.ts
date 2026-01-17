@@ -2,7 +2,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import pc from 'picocolors';
-import { getSchedulerConfig, getKnowledgeSyncConfig, ensureConfigDir, type ScheduledTask, type KnowledgeSyncConfig } from './config';
+import { getSchedulerConfig, getKnowledgeSyncConfig, getMemoryTTLConfig, ensureConfigDir, type ScheduledTask, type KnowledgeSyncConfig } from './config';
 import { loadFleetConfig, queryFleetNode, type FleetNode } from './fleet';
 import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
@@ -13,6 +13,8 @@ import {
   mergeReceivedMemories,
   updateSyncState,
   getSyncStats,
+  cleanupExpiredMemories,
+  getMemoryStats,
   type Memory,
 } from './memory';
 
@@ -25,6 +27,7 @@ const serverConfirmFn = async () => getServerAutoConfirm();
 // Timer references for cleanup
 let schedulerTimer: Timer | null = null;
 let knowledgeSyncTimer: Timer | null = null;
+let memoryCleanupTimer: Timer | null = null;
 
 // ============================================
 // Round-Robin Handoff State
@@ -518,6 +521,9 @@ export function startScheduler(): void {
 
   // Also start knowledge sync if enabled
   startKnowledgeSync();
+
+  // Also start memory cleanup if enabled
+  startMemoryCleanup();
 }
 
 /**
@@ -531,6 +537,10 @@ export function stopScheduler(): void {
   if (knowledgeSyncTimer) {
     clearInterval(knowledgeSyncTimer);
     knowledgeSyncTimer = null;
+  }
+  if (memoryCleanupTimer) {
+    clearInterval(memoryCleanupTimer);
+    memoryCleanupTimer = null;
   }
 }
 
@@ -663,6 +673,53 @@ export function startKnowledgeSync(): void {
   knowledgeSyncTimer = setInterval(knowledgeSyncTick, interval);
 }
 
+// ============================================
+// Memory Cleanup
+// ============================================
+
+/**
+ * Run memory cleanup tick
+ */
+function memoryCleanupTick(): void {
+  const config = getMemoryTTLConfig();
+
+  if (!config.enabled) {
+    return;
+  }
+
+  const result = cleanupExpiredMemories();
+
+  if (result.localExpired > 0 || result.sharedExpired > 0) {
+    console.log(pc.dim(`\n[Memory Cleanup] Removed ${result.localExpired} local, ${result.sharedExpired} shared (${result.totalRemaining} remaining)`));
+  }
+}
+
+/**
+ * Start memory cleanup timer
+ */
+export function startMemoryCleanup(): void {
+  // Prevent double-start
+  if (memoryCleanupTimer) {
+    return;
+  }
+
+  const config = getMemoryTTLConfig();
+
+  if (!config.enabled) {
+    return;
+  }
+
+  const interval = config.cleanupInterval || 3600000; // Default 1 hour
+
+  console.log(pc.dim(`   Memory TTL enabled (cleanup every ${interval / 1000}s)`));
+
+  // Run initial cleanup after 20s delay
+  setTimeout(memoryCleanupTick, 20000);
+
+  // Then cleanup at configured interval
+  memoryCleanupTimer = setInterval(memoryCleanupTick, interval);
+}
+
 /**
  * Get handoff stats for API
  */
@@ -708,6 +765,7 @@ export function getSchedulerStatus(): {
   tasks: Array<{ name: string; state: TaskState; schedule: string; nextRun?: number }>;
   handoff: ReturnType<typeof getHandoffStats>;
   knowledgeSync: ReturnType<typeof getSyncStats>;
+  memory: ReturnType<typeof getMemoryStats>;
 } {
   const config = getSchedulerConfig();
   const state = loadSchedulerState();
@@ -732,5 +790,6 @@ export function getSchedulerStatus(): {
     tasks,
     handoff: getHandoffStats(),
     knowledgeSync: getSyncStats(),
+    memory: getMemoryStats(),
   };
 }
