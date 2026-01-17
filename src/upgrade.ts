@@ -154,8 +154,14 @@ async function sha256(buffer: Buffer): Promise<string> {
  * Get the path to the current executable
  */
 export function getCurrentBinaryPath(): string {
-  // Bun.argv[0] is the path to the executable
-  return process.argv[0] || '/usr/local/bin/ai';
+  // For compiled Bun binaries, Bun.argv[0] should be the executable path
+  // Fall back to common install locations
+  const bunPath = typeof Bun !== 'undefined' ? Bun.argv[0] : undefined;
+  if (bunPath && bunPath.includes('/ai')) {
+    return bunPath;
+  }
+  // Default to standard install location
+  return '/usr/local/bin/ai';
 }
 
 /**
