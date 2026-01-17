@@ -179,6 +179,7 @@ ai "check the health of all production servers"
 - **Fleet Orchestration** — Query and manage remote servers with @ mentions
 - **Mesh Networking** — Fleet nodes can query each other directly
 - **Scheduled Tasks** — Cron-like jobs with load-based handoff to peers
+- **Shared Memory** — Nodes store and share learnings across the mesh
 - **Auto-Upgrade** — Fleet nodes upgrade themselves from GitHub releases
 - **mTLS Security** — Mutual TLS authentication for fleet communication
 - **Map/Reduce** — Batch process multiple inputs with optional aggregation
@@ -1237,6 +1238,109 @@ Response:
       "nextRun": 1705520700000
     }
   ]
+}
+```
+
+## Shared Memory
+
+Fleet nodes have a shared memory system for storing and sharing knowledge across the mesh. This enables collaborative problem-solving and knowledge propagation.
+
+### Memory Tools
+
+| Tool | Description |
+|------|-------------|
+| `memory_write` | Store a learning, solution, observation, or note |
+| `memory_read` | Read memories (filter by category, tags, source) |
+| `memory_search` | Search memories by text |
+| `memory_share` | Share memories with peer nodes |
+| `memory_ask_peers` | Ask peers if they have relevant experience |
+
+### Storing Memories
+
+```bash
+# Store a solution you discovered
+ai "Remember this: nginx 502 errors can be fixed by increasing proxy_read_timeout to 300s. Save as a solution with tags nginx, 502"
+
+# Store a learning
+ai "I learned that the database connection pool should be set to 2x CPU cores. Save this learning."
+
+# Store an observation
+ai "I noticed that memory usage spikes every hour around :30. Save this observation with tags memory, cron"
+```
+
+### Searching Memories
+
+```bash
+# Search local memories
+ai "Search your memories for nginx"
+
+# Search for solutions
+ai "Do you have any solutions for database connection issues?"
+```
+
+### Knowledge Sharing Between Nodes
+
+```bash
+# Ask peers for help
+ai "@node1 ask your peers if they know how to fix nginx 502 errors"
+
+# Share knowledge with peers
+ai "@node1 share your nginx solutions with node2"
+
+# Propagate a learning to all peers
+ai "@node1 share your latest learnings with all peers"
+```
+
+### Collaborative Problem Solving
+
+The shared memory enables powerful collaborative scenarios:
+
+**Problem-solving flow:**
+```
+Node1: "I have nginx 502 errors"
+Node1 → Fleet: "Anyone know how to fix this?"
+Node2: "I had that problem yesterday, here's the fix"
+Node2 → Node1: [solution from memory]
+Node1: "Thanks! Applying fix..."
+Node1 → memory: [saves solution for future]
+```
+
+**Knowledge propagation:**
+```
+Node1: "Just learned how to optimize database queries"
+Node1 → Node2: "Here's what I found..."
+Node2 → Node3: "Node1 found a better query method"
+Node3 → Node1: "Can you share the details?"
+```
+
+### Memory Storage
+
+Memories are stored locally in `~/.config/ai/memory.json`:
+
+```json
+{
+  "memories": [
+    {
+      "id": "mem_abc123",
+      "category": "solution",
+      "title": "Fix nginx 502 with proxy_read_timeout",
+      "content": "Increase proxy_read_timeout to 300s",
+      "tags": ["nginx", "502", "timeout"],
+      "created": 1705520400000,
+      "source": "local"
+    }
+  ],
+  "shared": {
+    "peer-node": [
+      {
+        "id": "mem_xyz789",
+        "category": "learning",
+        "title": "Database pool sizing",
+        "content": "Set pool to 2x CPU cores",
+        "source": "peer-node"
+      }
+    ]
+  }
 }
 ```
 

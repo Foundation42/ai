@@ -28,8 +28,15 @@ Available tools:
 - version: Get your own version and system info
 - fleet_query: Query other fleet nodes
 - fleet_list: List fleet nodes and their status
+- memory_write: Store learnings, solutions, or observations
+- memory_read: Read stored memories
+- memory_search: Search memories by text
+- memory_share: Share memories with peer nodes
+- memory_ask_peers: Ask peers if they have relevant experience
 
-Use tools proactively to complete your tasks.`;
+Use tools proactively to complete your tasks.
+When you learn something useful, save it with memory_write.
+When you solve a problem, save the solution so you can reference it later.`;
 
 export interface TaskState {
   lastRun?: number;          // Timestamp of last execution

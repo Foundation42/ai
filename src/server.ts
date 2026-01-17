@@ -94,6 +94,13 @@ Available tools:
 - edit_file: Make targeted edits to files
 - web_fetch: Fetch content from URLs (web pages, APIs, raw files)
 - version: Get your own version and system info
+- fleet_query: Query other fleet nodes
+- fleet_list: List fleet nodes and their status
+- memory_write: Store learnings, solutions, or observations
+- memory_read: Read stored memories
+- memory_search: Search memories by text
+- memory_share: Share memories with peer nodes
+- memory_ask_peers: Ask peers if they have relevant experience
 
 Use tools proactively when they would help answer the user's question. For example:
 - "What time is it?" → Use bash with "date"
@@ -102,6 +109,12 @@ Use tools proactively when they would help answer the user's question. For examp
 - "What's my IP address?" → Use bash with "curl ifconfig.me" or similar
 - "Fetch the README from GitHub" → Use web_fetch with the URL
 - "What version are you running?" → Use version tool
+- "Remember this for later" → Use memory_write
+- "Do you remember how we fixed X?" → Use memory_search
+- "Ask the other nodes if they know about X" → Use memory_ask_peers
+
+When you learn something useful, consider saving it with memory_write so you can reference it later.
+When you solve a problem, save the solution so other nodes can benefit from it.
 
 Always try to use your tools to get real, accurate information rather than saying you can't help.`;
 

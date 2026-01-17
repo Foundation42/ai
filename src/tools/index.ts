@@ -7,6 +7,7 @@ import { WebFetchTool } from './web_fetch';
 import { FleetQueryTool, FleetListTool, FleetBroadcastTool, FleetUpgradeTool, FleetRestartTool } from './fleet';
 import { VersionTool } from './version';
 import { MCPAddTool, MCPRemoveTool, MCPUpdateTool, MCPListTool } from './mcp_manage';
+import { MemoryWriteTool, MemoryReadTool, MemorySearchTool, MemoryShareTool, MemoryReceiveTool, MemoryAskPeersTool } from './memory';
 
 export type { Tool, ToolDefinition, ToolCall, ToolResult } from './types';
 
@@ -32,6 +33,14 @@ tools.set('mcp_add', new MCPAddTool());
 tools.set('mcp_remove', new MCPRemoveTool());
 tools.set('mcp_update', new MCPUpdateTool());
 tools.set('mcp_list', new MCPListTool());
+
+// Register memory tools
+tools.set('memory_write', new MemoryWriteTool());
+tools.set('memory_read', new MemoryReadTool());
+tools.set('memory_search', new MemorySearchTool());
+tools.set('memory_share', new MemoryShareTool());
+tools.set('memory_receive', new MemoryReceiveTool());
+tools.set('memory_ask_peers', new MemoryAskPeersTool());
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);
