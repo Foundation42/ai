@@ -10,7 +10,9 @@ import { appendHistory } from './history';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
 import { readline } from './utils/readline';
 
-const VERSION = '0.1.0';
+// Version is injected at build time via --define, falls back to package.json
+declare const __VERSION__: string;
+const VERSION = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.1.0-dev';
 
 const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the user's system.
 

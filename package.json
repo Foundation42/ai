@@ -5,9 +5,9 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "bun run src/index.ts",
-    "build": "bun build src/index.ts --compile --minify --sourcemap --outfile ai",
-    "build:linux": "bun build src/index.ts --compile --minify --target=bun-linux-x64 --outfile ai-linux",
-    "build:linux-arm": "bun build src/index.ts --compile --minify --target=bun-linux-arm64 --outfile ai-linux-arm"
+    "build": "bun build src/index.ts --compile --minify --sourcemap --define __VERSION__='\"'$(jq -r .version package.json)'\"' --outfile ai",
+    "build:linux": "bun build src/index.ts --compile --minify --target=bun-linux-x64 --define __VERSION__='\"'$(jq -r .version package.json)'\"' --outfile ai-linux-x64",
+    "build:linux-arm": "bun build src/index.ts --compile --minify --target=bun-linux-arm64 --define __VERSION__='\"'$(jq -r .version package.json)'\"' --outfile ai-linux-arm64"
   },
   "dependencies": {
     "marked": "^17.0.1",

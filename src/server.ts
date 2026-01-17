@@ -3,6 +3,10 @@ import { getToolDefinitions, executeTool, type ToolCall } from './tools';
 import { getDefaultSystemPrompt } from './config';
 import pc from 'picocolors';
 
+// Version is injected at build time via --define
+declare const __VERSION__: string;
+const VERSION = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.1.0-dev';
+
 const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the user's system.
 
 Available tools:
@@ -398,6 +402,7 @@ function handleFleetHealth(): Response {
 
   return jsonResponse({
     status: 'healthy',
+    version: VERSION,
     timestamp: new Date().toISOString(),
     hostname: os.hostname(),
     platform: os.platform(),
