@@ -21,7 +21,14 @@ marked.use(markedTerminal({
 export function renderMarkdown(text: string): string {
   try {
     // marked.parse returns string | Promise<string>, but with sync renderer it's string
-    return marked.parse(text) as string;
+    let result = marked.parse(text) as string;
+
+    // Workaround: marked-terminal doesn't process bold/italic inside list items
+    // Post-process any remaining **text** or *text* patterns
+    result = result.replace(/\*\*([^*]+)\*\*/g, (_, content) => pc.bold(content));
+    result = result.replace(/\*([^*]+)\*/g, (_, content) => pc.italic(content));
+
+    return result;
   } catch {
     // If rendering fails, return original text
     return text;
