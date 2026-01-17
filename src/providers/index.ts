@@ -3,16 +3,20 @@ import { OllamaProvider } from './ollama';
 import { OpenAIProvider } from './openai';
 import { AnthropicProvider } from './anthropic';
 import { GoogleProvider } from './google';
+import { MistralProvider } from './mistral';
+import { DeepSeekProvider } from './deepseek';
 
 export type { Provider, ProviderConfig, StreamOptions, Message } from './types';
 
-export type ProviderName = 'ollama' | 'openai' | 'anthropic' | 'google';
+export type ProviderName = 'ollama' | 'openai' | 'anthropic' | 'google' | 'mistral' | 'deepseek';
 
 const providers: Record<ProviderName, new (config?: ProviderConfig) => Provider> = {
   ollama: OllamaProvider,
   openai: OpenAIProvider,
   anthropic: AnthropicProvider,
   google: GoogleProvider,
+  mistral: MistralProvider,
+  deepseek: DeepSeekProvider,
 };
 
 export function createProvider(name: ProviderName, config?: ProviderConfig): Provider {
@@ -34,7 +38,7 @@ export function parseModelString(modelString: string): { provider: ProviderName;
   return null;
 }
 
-const DEFAULT_PROVIDER_ORDER: ProviderName[] = ['ollama', 'anthropic', 'openai', 'google'];
+const DEFAULT_PROVIDER_ORDER: ProviderName[] = ['google', 'anthropic', 'openai', 'mistral', 'deepseek', 'ollama'];
 
 function getProviderOrder(): ProviderName[] {
   const orderEnv = process.env.AI_PROVIDER_ORDER;
@@ -56,6 +60,10 @@ function isProviderAvailable(name: ProviderName): boolean {
       return !!process.env.ANTHROPIC_API_KEY;
     case 'google':
       return !!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
+    case 'mistral':
+      return !!process.env.MISTRAL_API_KEY;
+    case 'deepseek':
+      return !!process.env.DEEPSEEK_API_KEY;
     default:
       return false;
   }

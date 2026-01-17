@@ -85,14 +85,16 @@ Options:
   -v, --version                 Show version
 
 Providers:
-  ollama      Local Ollama instance (default, no API key needed)
-  openai      OpenAI API (requires OPENAI_API_KEY)
+  google      Google Gemini API (requires GOOGLE_API_KEY)
   anthropic   Anthropic API (requires ANTHROPIC_API_KEY)
-  google      Google Gemini API (requires GOOGLE_API_KEY or GEMINI_API_KEY)
+  openai      OpenAI API (requires OPENAI_API_KEY)
+  mistral     Mistral API (requires MISTRAL_API_KEY)
+  deepseek    DeepSeek API (requires DEEPSEEK_API_KEY)
+  ollama      Local Ollama instance (no API key needed)
 
 Config (~/.aiconfig):
-  OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY - API keys
-  AI_PROVIDER_ORDER - Comma-separated provider priority (default: ollama,anthropic,openai,google)
+  *_API_KEY - API keys for each provider
+  AI_PROVIDER_ORDER - Comma-separated priority (default: google,anthropic,openai,mistral,deepseek,ollama)
 
 Examples:
   ai "What is the capital of France?"
