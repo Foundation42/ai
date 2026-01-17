@@ -159,6 +159,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
   console.log(pc.dim(`   Fleet execute:     POST /v1/fleet/execute`));
   console.log(pc.dim(`   Fleet health:      GET  /v1/fleet/health`));
   console.log(pc.dim(`   Fleet upgrade:     GET/POST /v1/fleet/upgrade`));
+  console.log(pc.dim(`   Fleet restart:     POST /v1/fleet/restart`));
   console.log(pc.dim(`   List models:       GET  /v1/models`));
 
   if (showToken) {
@@ -241,6 +242,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
         // Fleet upgrade perform
         if (url.pathname === '/v1/fleet/upgrade' && req.method === 'POST') {
           return await handleUpgradePerform();
+        }
+
+        // Fleet restart
+        if (url.pathname === '/v1/fleet/restart' && req.method === 'POST') {
+          return handleRestart();
         }
 
         return jsonResponse({ error: { message: 'Not found', type: 'not_found' } }, 404);
@@ -586,6 +592,26 @@ async function handleUpgradePerform(): Promise<Response> {
     currentVersion: result.currentVersion,
     latestVersion: result.latestVersion,
   });
+}
+
+function handleRestart(): Response {
+  console.log(pc.yellow('Restart requested...'));
+
+  const response = jsonResponse({
+    success: true,
+    message: 'Server restarting...',
+    version: VERSION,
+  });
+
+  // Schedule exit after response is sent - systemd will restart us
+  setTimeout(() => {
+    console.log(pc.cyan('Restarting...'));
+    // Clear upgrade timer before exit
+    if (upgradeTimer) clearInterval(upgradeTimer);
+    process.exit(0);
+  }, 100);
+
+  return response;
 }
 
 function generateToken(): string {
