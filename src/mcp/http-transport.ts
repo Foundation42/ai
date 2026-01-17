@@ -26,7 +26,9 @@ export async function createHTTPTransport(config: HTTPTransportConfig): Promise<
   let sessionId: string | null = null;
   let postEndpoint: string = config.url;
   let connected = true;
+  let closed = false;  // Flag to signal readLoop to exit
   let sseReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let sseAbortController: AbortController | null = null;
 
   // Map of request ID -> resolver for pending responses
   const pendingResponses: Map<string | number, (response: JsonRpcResponse) => void> = new Map();
@@ -36,12 +38,14 @@ export async function createHTTPTransport(config: HTTPTransportConfig): Promise<
 
   const tryLegacySSE = async (): Promise<boolean> => {
     try {
+      sseAbortController = new AbortController();
       const response = await fetch(config.url, {
         method: 'GET',
         headers: {
           'Accept': 'text/event-stream',
           ...config.headers,
         },
+        signal: sseAbortController.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -59,12 +63,12 @@ export async function createHTTPTransport(config: HTTPTransportConfig): Promise<
       let buffer = '';
 
       const readLoop = async () => {
-        if (!sseReader) return;
+        if (!sseReader || closed) return;
 
         try {
-          while (true) {
+          while (!closed) {
             const { done, value } = await sseReader.read();
-            if (done) break;
+            if (done || closed) break;
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
@@ -125,13 +129,41 @@ export async function createHTTPTransport(config: HTTPTransportConfig): Promise<
         }
       };
 
-      // Start reading SSE in background
+      // Read SSE until we get the endpoint (or timeout)
+      // We don't keep the SSE stream open for responses since modern servers
+      // return JSON responses directly from POST requests
+      const endpointPromise = new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => resolve(), 2000);
+        const checkEndpoint = () => {
+          if (receivedEndpoint) {
+            clearTimeout(timeout);
+            resolve();
+          } else {
+            setTimeout(checkEndpoint, 50);
+          }
+        };
+        checkEndpoint();
+      });
+
+      // Start reading for endpoint discovery
       readLoop();
 
-      // Wait for endpoint event (up to 2 seconds)
-      for (let i = 0; i < 20; i++) {
-        if (receivedEndpoint) break;
-        await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for endpoint (up to 2 seconds)
+      await endpointPromise;
+
+      // Close the SSE connection - we'll use POST responses, not SSE
+      closed = true;
+      if (sseAbortController) {
+        sseAbortController.abort();
+        sseAbortController = null;
+      }
+      if (sseReader) {
+        try {
+          await sseReader.cancel();
+        } catch (e) {
+          // Ignore
+        }
+        sseReader = null;
       }
 
       return receivedEndpoint;
@@ -142,6 +174,9 @@ export async function createHTTPTransport(config: HTTPTransportConfig): Promise<
 
   // Try legacy SSE first to get endpoint
   const gotEndpoint = await tryLegacySSE();
+
+  // Reset closed flag (it was set during endpoint discovery cleanup)
+  closed = false;
 
   // If we got an endpoint from SSE, we're good
   // Otherwise, for modern transport, the POST endpoint is the same as the URL
@@ -286,6 +321,11 @@ export async function createHTTPTransport(config: HTTPTransportConfig): Promise<
 
     async close(): Promise<void> {
       connected = false;
+      closed = true;  // Signal readLoop to exit
+      if (sseAbortController) {
+        sseAbortController.abort();
+        sseAbortController = null;
+      }
       if (sseReader) {
         try {
           await sseReader.cancel();

@@ -622,16 +622,15 @@ async function main(): Promise<void> {
   // Initialize MCP servers if configured
   const mcpServers = getMCPServersConfig();
   if (Object.keys(mcpServers).length > 0) {
-    console.error(pc.dim(`Connecting to ${Object.keys(mcpServers).length} MCP server(s)...`));
     try {
       const mcpTools = await initializeMCPTools(mcpServers);
       if (mcpTools.length > 0) {
         registerTools(mcpTools);
         mcpToolsLoaded = true;
-        const toolNames = mcpTools.map(t => t.definition.name).join(', ');
-        console.error(pc.dim(`Loaded ${mcpTools.length} MCP tool(s): ${toolNames}\n`));
-      } else {
-        console.error(pc.dim(`MCP servers connected but no tools loaded\n`));
+        if (args.verbosity === 'verbose') {
+          const toolNames = mcpTools.map(t => t.definition.name).join(', ');
+          console.error(pc.dim(`Loaded ${mcpTools.length} MCP tool(s): ${toolNames}`));
+        }
       }
     } catch (error) {
       console.error(pc.yellow(`Warning: Failed to initialize MCP servers: ${error}`));

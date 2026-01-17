@@ -1,13 +1,21 @@
+// JSON Schema property - allows full schema structure for complex types
+export interface JsonSchemaProperty {
+  type?: string;
+  description?: string;
+  enum?: string[];
+  items?: JsonSchemaProperty;  // For arrays
+  properties?: Record<string, JsonSchemaProperty>;  // For objects
+  required?: string[];
+  default?: unknown;
+  [key: string]: unknown;  // Allow other JSON Schema properties
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
   parameters: {
     type: 'object';
-    properties: Record<string, {
-      type: string;
-      description: string;
-      enum?: string[];
-    }>;
+    properties: Record<string, JsonSchemaProperty>;
     required?: string[];
   };
 }

@@ -3,9 +3,74 @@
  * Converts MCP tools to the internal Tool interface
  */
 
-import type { Tool, ToolDefinition } from '../tools/types';
+import type { Tool, ToolDefinition, JsonSchemaProperty } from '../tools/types';
 import type { MCPToolDefinition, ToolCallResult, ToolContent } from './types';
 import { getMCPManager, type MCPClient } from './client';
+
+/**
+ * Fields that Google's Gemini API doesn't support in function schemas
+ * These need to be stripped out to avoid INVALID_ARGUMENT errors
+ */
+const UNSUPPORTED_SCHEMA_FIELDS = new Set([
+  'additionalProperties',
+  '$schema',
+  '$id',
+  '$ref',
+  'definitions',
+  '$defs',
+  'allOf',
+  'anyOf',
+  'oneOf',
+  'not',
+  'if',
+  'then',
+  'else',
+  'patternProperties',
+  'unevaluatedProperties',
+  'unevaluatedItems',
+  'contentMediaType',
+  'contentEncoding',
+  'examples',
+]);
+
+/**
+ * Recursively sanitize JSON Schema for Google's Gemini API:
+ * - Ensure arrays have items defined
+ * - Remove unsupported JSON Schema keywords
+ */
+function sanitizeSchema(schema: Record<string, unknown>): JsonSchemaProperty {
+  const result: JsonSchemaProperty = {};
+
+  for (const [key, value] of Object.entries(schema)) {
+    // Skip unsupported fields
+    if (UNSUPPORTED_SCHEMA_FIELDS.has(key)) {
+      continue;
+    }
+
+    if (key === 'properties' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize nested properties
+      const props: Record<string, JsonSchemaProperty> = {};
+      for (const [propKey, propValue] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof propValue === 'object' && propValue !== null) {
+          props[propKey] = sanitizeSchema(propValue as Record<string, unknown>);
+        }
+      }
+      result.properties = props;
+    } else if (key === 'items' && typeof value === 'object' && value !== null) {
+      // Recursively sanitize array items schema
+      result.items = sanitizeSchema(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  // If type is array but no items defined, add a default items schema
+  if (result.type === 'array' && !result.items) {
+    result.items = { type: 'string' };
+  }
+
+  return result;
+}
 
 /**
  * Create a Tool wrapper for an MCP tool
@@ -17,16 +82,12 @@ export function createMCPToolWrapper(
   // Create unique tool name with server prefix
   const toolName = `mcp_${serverName}_${mcpTool.name}`;
 
-  // Convert MCP inputSchema to our ToolDefinition parameters format
-  const properties: Record<string, { type: string; description: string; enum?: string[] }> = {};
+  // Sanitize and preserve the full inputSchema structure
+  const properties: Record<string, JsonSchemaProperty> = {};
 
   if (mcpTool.inputSchema.properties) {
     for (const [key, value] of Object.entries(mcpTool.inputSchema.properties)) {
-      properties[key] = {
-        type: value.type,
-        description: value.description || '',
-        enum: value.enum,
-      };
+      properties[key] = sanitizeSchema(value as Record<string, unknown>);
     }
   }
 
