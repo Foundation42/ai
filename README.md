@@ -146,11 +146,13 @@ Options:
 | OpenAI | gpt-4o-mini | Yes | OPENAI_API_KEY |
 | Mistral | mistral-small-latest | Yes | MISTRAL_API_KEY |
 | DeepSeek | deepseek-chat | Yes | DEEPSEEK_API_KEY |
-| Ollama | gemma3:4b | No | (local) |
+| Ollama | gemma3:4b | Yes* | (local) |
+
+\* Ollama tool support depends on the model (llama3.1+, mistral, qwen2.5, etc.)
 
 ## Tools
 
-When using a provider with tool support (Google, Anthropic, OpenAI, Mistral, DeepSeek), the AI can:
+When using a provider with tool support (all providers), the AI can:
 
 | Tool | Description |
 |------|-------------|
