@@ -2,6 +2,7 @@ import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
 import { getDefaultSystemPrompt, loadCertFile, getServerAutoConfirm, getAutoUpgradeConfig, type ServerTLSConfig } from './config';
 import { checkForUpgrade, performUpgrade, loadUpgradeState, saveUpgradeState } from './upgrade';
+import { startScheduler, stopScheduler, getSchedulerStatus } from './scheduler';
 import pc from 'picocolors';
 
 // Version is injected at build time via --define
@@ -162,6 +163,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
   console.log(pc.dim(`   Fleet health:      GET  /v1/fleet/health`));
   console.log(pc.dim(`   Fleet upgrade:     GET/POST /v1/fleet/upgrade`));
   console.log(pc.dim(`   Fleet restart:     POST /v1/fleet/restart`));
+  console.log(pc.dim(`   Scheduler status:  GET  /v1/scheduler`));
   console.log(pc.dim(`   List models:       GET  /v1/models`));
 
   if (showToken) {
@@ -251,6 +253,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
           return handleRestart();
         }
 
+        // Scheduler status
+        if (url.pathname === '/v1/scheduler' && req.method === 'GET') {
+          return handleSchedulerStatus();
+        }
+
         return jsonResponse({ error: { message: 'Not found', type: 'not_found' } }, 404);
       } catch (err) {
         console.error(pc.red('Server error:'), err);
@@ -266,6 +273,9 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
   // Start upgrade polling if enabled
   startUpgradePolling(VERSION);
+
+  // Start scheduler if enabled
+  startScheduler();
 }
 
 async function handleChatCompletions(req: Request): Promise<Response> {
@@ -608,12 +618,18 @@ function handleRestart(): Response {
   // Schedule exit after response is sent - systemd will restart us
   setTimeout(() => {
     console.log(pc.cyan('Restarting...'));
-    // Clear upgrade timer before exit
+    // Clear timers before exit
     if (upgradeTimer) clearInterval(upgradeTimer);
+    stopScheduler();
     process.exit(0);
   }, 100);
 
   return response;
+}
+
+function handleSchedulerStatus(): Response {
+  const status = getSchedulerStatus();
+  return jsonResponse(status);
 }
 
 function generateToken(): string {

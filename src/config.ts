@@ -48,12 +48,36 @@ export interface AutoUpgradeConfig {
   interval?: number;      // Poll interval in ms (default: 60000 = 1 minute)
 }
 
+// Scheduled task configuration
+export interface ScheduledTask {
+  name: string;              // Task identifier
+  schedule: string;          // Cron expression or "@every 5m", "@hourly", etc.
+  prompt: string;            // The prompt to execute
+  enabled?: boolean;         // Default true
+  condition?: {              // Optional conditions to run
+    maxLoad?: number;        // Only run if system load < threshold (e.g., 0.8)
+    minLoad?: number;        // Only run if system load > threshold (for triggers)
+  };
+  handoff?: {                // Load-based handoff to peers
+    enabled: boolean;        // Enable handoff when busy
+    loadThreshold: number;   // Hand off if local load > this (e.g., 0.7)
+    peers?: string[];        // Specific peers, or omit for all mesh peers
+    prompt?: string;         // Custom handoff prompt (default: original prompt)
+  };
+}
+
+export interface SchedulerConfig {
+  enabled?: boolean;         // Master switch (default: false)
+  tasks?: ScheduledTask[];   // List of scheduled tasks
+}
+
 export interface ServerConfig {
   port?: number;
   token?: string;
   tls?: ServerTLSConfig;
   autoConfirm?: boolean;  // Auto-confirm dangerous commands (use with caution)
   autoUpgrade?: AutoUpgradeConfig;  // Auto-upgrade polling config
+  scheduler?: SchedulerConfig;      // Scheduled tasks config
 }
 
 // MCP Server configuration (local stdio or remote SSE)
@@ -252,6 +276,14 @@ export function getAutoUpgradeConfig(): AutoUpgradeConfig {
 }
 
 /**
+ * Get scheduler configuration
+ */
+export function getSchedulerConfig(): SchedulerConfig {
+  const config = loadConfig();
+  return config.server?.scheduler || { enabled: false, tasks: [] };
+}
+
+/**
  * Get MCP servers configuration
  */
 export function getMCPServersConfig(): Record<string, MCPServerConfig> {
@@ -435,6 +467,29 @@ export function createTemplateConfig(): void {
       autoUpgrade: {
         enabled: true,     // Enable periodic upgrade checks
         interval: 60000    // Check every minute (in milliseconds)
+      },
+      scheduler: {
+        enabled: true,     // Enable scheduled tasks
+        tasks: [
+          {
+            name: "health-check",
+            schedule: "@every 5m",   // Every 5 minutes
+            prompt: "Check system health: disk space, memory, and load average"
+          },
+          {
+            name: "load-handoff",
+            schedule: "@every 1m",   // Check every minute
+            prompt: "Monitor system load",
+            condition: {
+              minLoad: 0.7           // Only trigger when load > 70%
+            },
+            handoff: {
+              enabled: true,
+              loadThreshold: 0.7,    // Hand off if local load > 70%
+              prompt: "I'm getting busy over here - can you help with some analysis?"
+            }
+          }
+        ]
       },
       tls: {
         cert: "~/.config/ai/certs/server.pem",

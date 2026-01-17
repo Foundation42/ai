@@ -177,6 +177,8 @@ ai "check the health of all production servers"
 - **Tool Execution** — AI can run bash commands, read/edit files, explore directories
 - **MCP Support** — Connect to local or remote MCP servers for extended capabilities
 - **Fleet Orchestration** — Query and manage remote servers with @ mentions
+- **Mesh Networking** — Fleet nodes can query each other directly
+- **Scheduled Tasks** — Cron-like jobs with load-based handoff to peers
 - **Auto-Upgrade** — Fleet nodes upgrade themselves from GitHub releases
 - **mTLS Security** — Mutual TLS authentication for fleet communication
 - **Map/Reduce** — Batch process multiple inputs with optional aggregation
@@ -859,6 +861,111 @@ ai "what version is each fleet node running?"
 - Enable mTLS for secure communication (see mTLS section)
 - Fleet nodes can query each other - build hierarchical architectures
 
+### Mesh Networking
+
+Fleet nodes can communicate directly with each other, enabling powerful distributed architectures where any node can query any other node.
+
+#### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Controller                          │
+│                   (your machine)                        │
+│                                                         │
+│  fleet.nodes: { node1, node2, node3 }                   │
+└─────────────────┬───────────────────┬───────────────────┘
+                  │                   │
+         ┌────────▼────────┐  ┌───────▼────────┐
+         │     Node 1      │◄─►     Node 2      │
+         │                 │  │                 │
+         │ fleet.nodes:    │  │ fleet.nodes:    │
+         │  { node2 }      │  │  { node1 }      │
+         └────────┬────────┘  └────────┬────────┘
+                  │                    │
+                  └──────────▼─────────┘
+                       Both nodes can
+                       query each other
+```
+
+#### Configuration
+
+To enable mesh networking, configure each node to know about its peers:
+
+**Node 1** (`~/.config/ai/config.json`):
+```json
+{
+  "server": {
+    "port": 9443,
+    "autoConfirm": true,
+    "tls": { "cert": "...", "key": "...", "ca": "..." }
+  },
+  "fleet": {
+    "token": "shared-fleet-token",
+    "tls": {
+      "ca": "/path/to/ca.pem",
+      "clientCert": "/path/to/client.pem",
+      "clientKey": "/path/to/client-key.pem"
+    },
+    "nodes": {
+      "node2": {
+        "url": "https://node2-ip:9443",
+        "description": "Peer node 2"
+      }
+    }
+  }
+}
+```
+
+**Node 2** (mirror configuration pointing to Node 1):
+```json
+{
+  "fleet": {
+    "nodes": {
+      "node1": {
+        "url": "https://node1-ip:9443",
+        "description": "Peer node 1"
+      }
+    }
+  }
+}
+```
+
+#### Peer-to-Peer Queries
+
+Once configured, nodes can query each other directly:
+
+```bash
+# From your controller, ask node1 to query node2
+ai "@node1 ask node2 what its current load is"
+
+# Node1 will use its fleet tools to query node2 directly
+# Response: "I queried node2 - it reports 15% CPU, 2.1GB memory used"
+```
+
+#### Use Cases
+
+**Load Distribution**: Nodes can ask peers for help when busy:
+```bash
+# A node under heavy load can delegate work
+ai "@node1 if you're busy, ask node2 to handle disk analysis"
+```
+
+**Redundant Monitoring**: Nodes can cross-check each other:
+```bash
+ai "@node1 verify that node2 is healthy and responding"
+```
+
+**Distributed Tasks**: Coordinate complex operations:
+```bash
+ai "@node1 coordinate with node2 to analyze logs from both servers"
+```
+
+#### Security Notes
+
+- All nodes should use mTLS with the same CA for secure peer communication
+- Each node needs a copy of the client certificate and key for outbound connections
+- Use unique server certificates per node, but shared client certificates are fine for mesh
+
 ## Server Mode
 
 Run as an OpenAI-compatible API server with fleet management capabilities:
@@ -882,6 +989,7 @@ ai --server --port 8080 --token mysecret
 | `/v1/fleet/upgrade` | GET | Check for available upgrades |
 | `/v1/fleet/upgrade` | POST | Perform upgrade and restart |
 | `/v1/fleet/restart` | POST | Restart the server (for config changes) |
+| `/v1/scheduler` | GET | View scheduled tasks status |
 
 ### Examples
 
@@ -1001,6 +1109,136 @@ ai "restart all fleet nodes"
 3. Backs up the current binary
 4. Replaces with the new version
 5. Restarts automatically (via systemd or restart script)
+
+## Scheduled Tasks
+
+Fleet nodes can run scheduled tasks—cron-like jobs that execute prompts at intervals. This enables automated monitoring, health checks, and load-based handoff between nodes.
+
+### Configuration
+
+```json
+{
+  "server": {
+    "scheduler": {
+      "enabled": true,
+      "tasks": [
+        {
+          "name": "health-check",
+          "schedule": "@every 5m",
+          "prompt": "Check system health: disk space, memory, and load average"
+        },
+        {
+          "name": "log-monitor",
+          "schedule": "*/15 * * * *",
+          "prompt": "Check /var/log/syslog for errors in the last 15 minutes"
+        }
+      ]
+    }
+  }
+}
+```
+
+### Schedule Formats
+
+| Format | Description | Example |
+|--------|-------------|---------|
+| `@every Nm` | Every N minutes | `@every 5m` |
+| `@every Nh` | Every N hours | `@every 2h` |
+| `@every Ns` | Every N seconds | `@every 30s` |
+| `@hourly` | Every hour | `@hourly` |
+| `@daily` | Every day | `@daily` |
+| `*/N * * * *` | Cron: every N minutes | `*/5 * * * *` |
+
+### Conditional Execution
+
+Tasks can have conditions that must be met before running:
+
+```json
+{
+  "name": "intensive-analysis",
+  "schedule": "@every 10m",
+  "prompt": "Run detailed performance analysis",
+  "condition": {
+    "maxLoad": 0.5
+  }
+}
+```
+
+Conditions:
+- `maxLoad`: Only run if system load < threshold (0-1 scale)
+- `minLoad`: Only run if system load > threshold (for triggered tasks)
+
+### Load-Based Handoff
+
+The killer feature: tasks can automatically delegate to peer nodes when the local system is busy:
+
+```json
+{
+  "name": "load-handoff",
+  "schedule": "@every 1m",
+  "prompt": "Analyze system metrics",
+  "condition": {
+    "minLoad": 0.7
+  },
+  "handoff": {
+    "enabled": true,
+    "loadThreshold": 0.7,
+    "prompt": "Hey, I'm getting quite busy over here - can you help with some analysis?"
+  }
+}
+```
+
+When load exceeds the threshold:
+1. The node checks its configured peer nodes
+2. Sends the handoff prompt to the first available peer
+3. The peer executes the task instead
+
+This enables collaborative load balancing across your fleet mesh.
+
+### Task State
+
+Task execution state is persisted to `~/.config/ai/scheduler-state.json`:
+
+```json
+{
+  "tasks": {
+    "health-check": {
+      "lastRun": 1705520400000,
+      "lastResult": "success",
+      "lastResponse": "All systems healthy...",
+      "runCount": 42,
+      "errorCount": 0
+    }
+  }
+}
+```
+
+### Monitoring Tasks
+
+Check scheduler status via the API:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/v1/scheduler
+```
+
+Response:
+```json
+{
+  "enabled": true,
+  "tasks": [
+    {
+      "name": "health-check",
+      "schedule": "@every 5m",
+      "state": {
+        "lastRun": 1705520400000,
+        "lastResult": "success",
+        "runCount": 42
+      },
+      "nextRun": 1705520700000
+    }
+  ]
+}
+```
 
 ## systemd Integration
 
