@@ -58,7 +58,7 @@ The remote AI will use its local tools (bash, read_file, etc.) to answer.`,
 
     if (nodeName === 'all') {
       // Query all nodes
-      const results = await queryFleetNodes(config.nodes, prompt);
+      const results = await queryFleetNodes(config.nodes, prompt, { fleetTLS: config.tls });
       return results.map(r => {
         if (r.success) {
           return `@${r.node}: ${r.response}`;
@@ -75,7 +75,7 @@ The remote AI will use its local tools (bash, read_file, etc.) to answer.`,
       return `Error: Unknown node "${nodeName}". Available nodes: ${available || 'none'}`;
     }
 
-    const result = await queryFleetNode(node, prompt);
+    const result = await queryFleetNode(node, prompt, { fleetTLS: config.tls });
     if (result.success) {
       return result.response || '(no response)';
     } else {
@@ -144,7 +144,7 @@ export class FleetBroadcastTool implements Tool {
       return 'Error: No fleet nodes configured. Set AI_FLEET_NODES in ~/.aiconfig';
     }
 
-    const results = await queryFleetNodes(config.nodes, prompt);
+    const results = await queryFleetNodes(config.nodes, prompt, { fleetTLS: config.tls });
 
     const lines = [`Broadcast to ${results.length} nodes:`, ''];
     for (const r of results) {
@@ -207,7 +207,7 @@ export class FleetUpgradeTool implements Tool {
 
     const results: string[] = [];
     for (const node of nodes) {
-      const result = await upgradeFleetNode(node, action === 'upgrade');
+      const result = await upgradeFleetNode(node, action === 'upgrade', config.tls);
       results.push(`@${node.name}: ${result.message}`);
     }
 
