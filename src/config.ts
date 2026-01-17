@@ -1,36 +1,138 @@
 import { homedir } from 'os';
 import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
-const CONFIG_PATH = join(homedir(), '.aiconfig');
+const CONFIG_DIR = join(homedir(), '.config', 'ai');
+const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
+
+export interface ProviderConfig {
+  apiKey?: string;
+  baseUrl?: string;
+  defaultModel?: string;
+}
+
+export interface FleetNodeConfig {
+  url: string;
+  token?: string;
+  description?: string;
+}
+
+export interface FleetConfig {
+  token?: string;
+  nodes: Record<string, FleetNodeConfig>;
+}
+
+export interface AIConfig {
+  providers?: {
+    default?: string;
+    google?: ProviderConfig;
+    anthropic?: ProviderConfig;
+    openai?: ProviderConfig;
+    mistral?: ProviderConfig;
+    deepseek?: ProviderConfig;
+    ollama?: ProviderConfig;
+  };
+  fleet?: FleetConfig;
+  defaults?: {
+    model?: string;
+    verbosity?: 'quiet' | 'normal' | 'verbose';
+    autoConfirm?: boolean;
+  };
+}
+
+let cachedConfig: AIConfig | null = null;
 
 /**
- * Load environment variables from ~/.aiconfig file
- * Format: KEY=value (one per line, # for comments)
+ * Load configuration from ~/.config/ai/config.json
  */
-export async function loadEnvFile(): Promise<void> {
-  try {
-    const file = Bun.file(CONFIG_PATH);
-    if (await file.exists()) {
-      const content = await file.text();
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        // Skip comments and empty lines
-        if (!trimmed || trimmed.startsWith('#')) continue;
-
-        const eqIndex = trimmed.indexOf('=');
-        if (eqIndex > 0) {
-          const key = trimmed.slice(0, eqIndex).trim();
-          const value = trimmed.slice(eqIndex + 1).trim();
-          // Only set if not already defined in environment
-          if (!process.env[key]) {
-            process.env[key] = value;
-          }
-        }
-      }
-    }
-  } catch {
-    // Silently ignore errors reading config file
+export function loadConfig(): AIConfig {
+  if (cachedConfig) {
+    return cachedConfig;
   }
+
+  try {
+    if (existsSync(CONFIG_PATH)) {
+      const content = require('fs').readFileSync(CONFIG_PATH, 'utf-8');
+      cachedConfig = JSON.parse(content) as AIConfig;
+
+      // Set environment variables from config for providers
+      const providers = cachedConfig.providers || {};
+      if (providers.google?.apiKey) {
+        process.env.GOOGLE_API_KEY = providers.google.apiKey;
+      }
+      if (providers.anthropic?.apiKey) {
+        process.env.ANTHROPIC_API_KEY = providers.anthropic.apiKey;
+      }
+      if (providers.openai?.apiKey) {
+        process.env.OPENAI_API_KEY = providers.openai.apiKey;
+      }
+      if (providers.mistral?.apiKey) {
+        process.env.MISTRAL_API_KEY = providers.mistral.apiKey;
+      }
+      if (providers.deepseek?.apiKey) {
+        process.env.DEEPSEEK_API_KEY = providers.deepseek.apiKey;
+      }
+      if (providers.ollama?.baseUrl) {
+        process.env.OLLAMA_HOST = providers.ollama.baseUrl;
+      }
+
+      return cachedConfig;
+    }
+  } catch (err) {
+    console.error(`Warning: Failed to load config from ${CONFIG_PATH}:`, err);
+  }
+
+  cachedConfig = {};
+  return cachedConfig;
+}
+
+/**
+ * Get the config file path
+ */
+export function getConfigPath(): string {
+  return CONFIG_PATH;
+}
+
+/**
+ * Ensure config directory exists
+ */
+export function ensureConfigDir(): void {
+  if (!existsSync(CONFIG_DIR)) {
+    mkdirSync(CONFIG_DIR, { recursive: true });
+  }
+}
+
+/**
+ * Save configuration to file
+ */
+export function saveConfig(config: AIConfig): void {
+  ensureConfigDir();
+  require('fs').writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+  cachedConfig = config;
+}
+
+/**
+ * Get fleet configuration
+ */
+export function getFleetConfig(): FleetConfig {
+  const config = loadConfig();
+  return config.fleet || { nodes: {} };
+}
+
+/**
+ * Get default provider name
+ */
+export function getDefaultProvider(): string | undefined {
+  const config = loadConfig();
+  return config.providers?.default || config.defaults?.model?.split(':')[0];
+}
+
+/**
+ * Get default model
+ */
+export function getDefaultModel(): string | undefined {
+  const config = loadConfig();
+  return config.defaults?.model;
 }
 
 export type Verbosity = 'quiet' | 'normal' | 'verbose';
@@ -49,15 +151,18 @@ export interface CLIArgs {
   server: boolean;
   port: number;
   token?: string;
+  configInit?: boolean;
 }
 
 export function parseArgs(args: string[]): CLIArgs {
+  const config = loadConfig();
+
   const result: CLIArgs = {
     prompt: [],
     help: false,
     version: false,
-    verbosity: 'normal',
-    yes: false,
+    verbosity: config.defaults?.verbosity || 'normal',
+    yes: config.defaults?.autoConfirm || false,
     map: false,
     server: false,
     port: 8080,
@@ -94,11 +199,18 @@ export function parseArgs(args: string[]): CLIArgs {
       result.port = parseInt(args[++i] || '8080', 10);
     } else if (arg === '--token') {
       result.token = args[++i];
+    } else if (arg === '--config-init') {
+      result.configInit = true;
     } else if (!arg.startsWith('-')) {
       result.prompt.push(arg);
     }
 
     i++;
+  }
+
+  // Apply default model if not specified
+  if (!result.model && config.defaults?.model) {
+    result.model = config.defaults.model;
   }
 
   return result;
@@ -127,29 +239,83 @@ Options:
 Server Mode:
   --server                      Start as HTTP server (OpenAI-compatible API)
   -p, --port <port>             Server port (default: 8080)
-  --token <token>               Bearer token for auth (or set AI_SERVER_TOKEN)
+  --token <token>               Bearer token for auth (or set in config)
+
+Configuration:
+  --config-init                 Create a template config file
+  Config file: ~/.config/ai/config.json
 
 Providers:
-  google      Google Gemini API (requires GOOGLE_API_KEY)
-  anthropic   Anthropic API (requires ANTHROPIC_API_KEY)
-  openai      OpenAI API (requires OPENAI_API_KEY)
-  mistral     Mistral API (requires MISTRAL_API_KEY)
-  deepseek    DeepSeek API (requires DEEPSEEK_API_KEY)
-  ollama      Local Ollama instance (no API key needed)
+  google      Google Gemini API
+  anthropic   Anthropic API
+  openai      OpenAI API
+  mistral     Mistral API
+  deepseek    DeepSeek API
+  ollama      Local Ollama instance
 
-Config (~/.aiconfig):
-  *_API_KEY - API keys for each provider
-  AI_PROVIDER_ORDER - Comma-separated priority (default: google,anthropic,openai,mistral,deepseek,ollama)
+Fleet Commands:
+  @nodename <prompt>            Query a specific fleet node
+  @all <prompt>                 Broadcast to all fleet nodes
 
 Examples:
   ai "What is the capital of France?"
   ai -m openai:gpt-4o "Explain quantum computing"
-  cat file.txt | ai "Summarize this"
-  echo "Hello" | ai -s "You are a pirate" "Respond to this greeting"
-
-Map/Reduce:
-  ls *.ts | ai --map "Describe this file" -y
-  ai -g "src/**/*.ts" "Review this file" -y
-  ai -g "*.md" "Summarize" --reduce "Combine into overview"
+  ai "@server1 check disk space"
+  ai "@all report memory usage"
 `);
+}
+
+/**
+ * Create a template config file
+ */
+export function createTemplateConfig(): void {
+  const template: AIConfig = {
+    providers: {
+      default: "google",
+      google: {
+        apiKey: "your-google-api-key"
+      },
+      anthropic: {
+        apiKey: "your-anthropic-api-key"
+      },
+      openai: {
+        apiKey: "your-openai-api-key"
+      },
+      mistral: {
+        apiKey: "your-mistral-api-key"
+      },
+      deepseek: {
+        apiKey: "your-deepseek-api-key"
+      },
+      ollama: {
+        baseUrl: "http://localhost:11434"
+      }
+    },
+    fleet: {
+      token: "your-fleet-token",
+      nodes: {
+        "example-server": {
+          url: "http://example.com:9090",
+          description: "Example fleet node"
+        }
+      }
+    },
+    defaults: {
+      model: "google:gemini-2.0-flash",
+      verbosity: "normal",
+      autoConfirm: false
+    }
+  };
+
+  ensureConfigDir();
+
+  if (existsSync(CONFIG_PATH)) {
+    console.log(`Config already exists at ${CONFIG_PATH}`);
+    console.log('Remove it first if you want to create a new template.');
+    return;
+  }
+
+  saveConfig(template);
+  console.log(`Created template config at ${CONFIG_PATH}`);
+  console.log('Edit it to add your API keys and fleet nodes.');
 }

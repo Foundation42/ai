@@ -2,7 +2,7 @@
 import ora from 'ora';
 import pc from 'picocolors';
 import { Glob } from 'bun';
-import { parseArgs, printHelp, loadEnvFile, type Verbosity } from './config';
+import { parseArgs, printHelp, createTemplateConfig, type Verbosity } from './config';
 import { getProvider, type StreamOptions, type Message, type Provider, type StreamChunk } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
 import { renderMarkdown } from './utils/markdown';
@@ -565,7 +565,11 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  await loadEnvFile();
+  // Config init mode
+  if (args.configInit) {
+    createTemplateConfig();
+    process.exit(0);
+  }
 
   // Server mode
   if (args.server) {

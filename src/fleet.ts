@@ -1,9 +1,11 @@
 import pc from 'picocolors';
+import { getFleetConfig as getConfigFleet, type FleetConfig as ConfigFleetConfig } from './config';
 
 export interface FleetNode {
   name: string;
   url: string;
   token?: string;
+  description?: string;
 }
 
 export interface FleetConfig {
@@ -20,40 +22,22 @@ export interface FleetQueryResult {
 }
 
 /**
- * Parse fleet configuration from environment/config
- * Format in ~/.aiconfig:
- *   AI_FLEET_NODES=name1:url1,name2:url2
- *   AI_FLEET_TOKEN=default-token
- *   AI_FLEET_TOKEN_name1=specific-token
+ * Load fleet configuration from ~/.config/ai/config.json
  */
 export function loadFleetConfig(): FleetConfig {
+  const configFleet = getConfigFleet();
   const nodes: FleetNode[] = [];
-  const defaultToken = process.env.AI_FLEET_TOKEN;
 
-  // Parse AI_FLEET_NODES=name:url,name:url
-  const nodesEnv = process.env.AI_FLEET_NODES || '';
-  for (const entry of nodesEnv.split(',')) {
-    const trimmed = entry.trim();
-    if (!trimmed) continue;
-
-    const colonIdx = trimmed.indexOf(':');
-    if (colonIdx === -1) continue;
-
-    const name = trimmed.slice(0, colonIdx).trim();
-    const url = trimmed.slice(colonIdx + 1).trim();
-
-    if (name && url) {
-      // Check for node-specific token
-      const nodeToken = process.env[`AI_FLEET_TOKEN_${name.replace(/-/g, '_').toUpperCase()}`];
-      nodes.push({
-        name,
-        url: url.startsWith('http') ? url : `http://${url}`,
-        token: nodeToken || defaultToken,
-      });
-    }
+  for (const [name, nodeConfig] of Object.entries(configFleet.nodes || {})) {
+    nodes.push({
+      name,
+      url: nodeConfig.url.startsWith('http') ? nodeConfig.url : `http://${nodeConfig.url}`,
+      token: nodeConfig.token || configFleet.token,
+      description: nodeConfig.description,
+    });
   }
 
-  return { nodes, defaultToken };
+  return { nodes, defaultToken: configFleet.token };
 }
 
 /**
