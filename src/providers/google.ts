@@ -19,21 +19,29 @@ export class GoogleProvider implements Provider {
   private convertMessages(messages: Message[]): Array<{ role: string; parts: Array<Record<string, unknown>> }> {
     const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = [];
 
-    for (const msg of messages) {
+    let i = 0;
+    while (i < messages.length) {
+      const msg = messages[i]!;
+
       if (msg.role === 'system') {
         contents.push({ role: 'user', parts: [{ text: msg.content }] });
         contents.push({ role: 'model', parts: [{ text: 'Understood. I will follow these instructions.' }] });
+        i++;
       } else if (msg.role === 'tool') {
-        // Tool result - add as function response
-        contents.push({
-          role: 'function',
-          parts: [{
+        // Batch all consecutive tool results into a single function response
+        // Google requires all function responses from one turn to be in one message
+        const toolParts: Array<Record<string, unknown>> = [];
+        while (i < messages.length && messages[i]!.role === 'tool') {
+          const toolMsg = messages[i]!;
+          toolParts.push({
             functionResponse: {
-              name: msg.tool_call_id,
-              response: { result: msg.content },
+              name: toolMsg.tool_call_id,
+              response: { result: toolMsg.content },
             },
-          }],
-        });
+          });
+          i++;
+        }
+        contents.push({ role: 'function', parts: toolParts });
       } else if (msg.role === 'assistant' && msg.tool_calls?.length) {
         // Assistant with tool calls
         const parts: Array<Record<string, unknown>> = [];
@@ -49,9 +57,11 @@ export class GoogleProvider implements Provider {
           });
         }
         contents.push({ role: 'model', parts });
+        i++;
       } else {
         const role = msg.role === 'assistant' ? 'model' : 'user';
         contents.push({ role, parts: [{ text: msg.content }] });
+        i++;
       }
     }
 
