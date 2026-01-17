@@ -35,15 +35,46 @@ AI CLI is designed for **operations**:
 | Help you develop | Help you operate |
 | Single machine | Entire fleet |
 
-**Key differences:**
+**Not another pipe-to-LLM tool.** Tools like [llm](https://github.com/simonw/llm), [mods](https://github.com/charmbracelet/mods), and `gh copilot` are excellent for piping content through language models:
 
-- **Runs on servers, not just your laptop** — Deploy AI CLI to your infrastructure and query machines remotely with `@mentions`
+```bash
+# llm - pipe content for transformation
+cat README.md | llm "convert this to a man page"
+
+# mods - Unix-y pipeline integration
+ls -lh | mods "which file is largest?"
+
+# gh copilot - command discovery
+gh copilot suggest "find large files"
+```
+
+These tools **process text you give them**. AI CLI **takes action on your system**:
+
+| Pipe-to-LLM Tools | AI CLI |
+|-------------------|--------|
+| You find the data | It finds the data |
+| You run the commands | It runs the commands |
+| Transform text | Accomplish tasks |
+| Single interaction | Multi-step reasoning |
+| Your machine only | Entire fleet |
+
+```bash
+# With pipe tools, YOU do the work:
+find . -name "*.log" | llm "summarize errors"
+
+# With AI CLI, IT does the work:
+ai "find all log files and summarize any errors"
+```
+
+**Key differences from everything else:**
+
+- **Runs on servers, not just your laptop** — Deploy to your infrastructure and query machines remotely with `@mentions`
 - **Fleet orchestration** — Manage dozens of machines with natural language: `"check disk space on all web servers"`
 - **Self-managing nodes** — Fleet nodes auto-upgrade themselves from GitHub releases
 - **Production-ready security** — mTLS authentication, token auth, confirmation prompts for dangerous commands
-- **Not just code** — Find files, analyze logs, monitor systems, manage services, troubleshoot problems
+- **Agentic execution** — Multi-step reasoning: finds files, reads them, runs commands, iterates until done
 
-Think of it this way: coding assistants help you *build* software. AI CLI helps you *run* it.
+Think of it this way: pipe tools help you *transform* text. Coding assistants help you *build* software. AI CLI helps you *run* it.
 
 ## What It Is
 
