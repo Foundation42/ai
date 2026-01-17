@@ -100,7 +100,66 @@ async function runSingleShot(
   mode: Mode,
   isOutputPiped: boolean
 ): Promise<void> {
-  const { text } = await streamResponse(provider, prompt, options, !isOutputPiped);
+  const useTools = provider.supportsTools;
+  const messages: Message[] = [];
+
+  if (options.systemPrompt) {
+    messages.push({ role: 'system', content: options.systemPrompt });
+  }
+  messages.push({ role: 'user', content: prompt });
+
+  const streamOpts: StreamOptions = {
+    ...options,
+    messages,
+    tools: useTools ? getToolDefinitions() : undefined,
+  };
+
+  let loopCount = 0;
+  const maxLoops = 10;
+  let finalText = '';
+
+  while (loopCount < maxLoops) {
+    loopCount++;
+
+    const { text, toolCalls } = await streamResponse(provider, prompt, streamOpts, !isOutputPiped);
+
+    const assistantMsg: Message = { role: 'assistant', content: text };
+    if (toolCalls.length > 0) {
+      assistantMsg.tool_calls = toolCalls;
+    }
+    messages.push(assistantMsg);
+    finalText = text;
+
+    if (toolCalls.length === 0) {
+      break;
+    }
+
+    // Execute tool calls
+    for (const call of toolCalls) {
+      console.error(pc.dim(`\n🔧 ${call.name}: ${JSON.stringify(call.arguments)}`));
+
+      const result = await executeTool(call, async (tool, args) => {
+        if (tool.requiresConfirmation?.(args)) {
+          return confirmToolExecution(String(args.command || ''));
+        }
+        return true;
+      });
+
+      if (result.error) {
+        console.error(pc.red(result.result));
+      } else {
+        console.error(pc.dim(result.result.slice(0, 500) + (result.result.length > 500 ? '...' : '')));
+      }
+
+      messages.push({
+        role: 'tool',
+        content: result.result,
+        tool_call_id: call.id,
+      });
+    }
+
+    console.error();
+  }
 
   await appendHistory({
     timestamp: new Date().toISOString(),
@@ -108,7 +167,7 @@ async function runSingleShot(
     provider: provider.name,
     model: options.model || provider.defaultModel,
     prompt,
-    response: text,
+    response: finalText,
   });
 }
 
