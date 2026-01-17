@@ -18,7 +18,7 @@ A powerful command-line interface for interacting with LLMs. Built with Bun, fea
 
 ```bash
 # Clone and build
-git clone <repo>
+git clone https://github.com/Foundation42/ai.git
 cd ai
 bun install
 bun run build
