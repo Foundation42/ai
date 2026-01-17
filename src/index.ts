@@ -399,6 +399,131 @@ async function runRepl(provider: Provider, options: StreamOptions, verbosity: Ve
   process.stdin.pause();
 }
 
+interface MapReduceOptions {
+  provider: Provider;
+  streamOptions: StreamOptions;
+  prompt: string;
+  items: string[];
+  reducePrompt?: string;
+  verbosity: Verbosity;
+  autoYes: boolean;
+  isOutputPiped: boolean;
+}
+
+async function runMapReduce(options: MapReduceOptions): Promise<void> {
+  const { provider, streamOptions, prompt, items, reducePrompt, verbosity, autoYes, isOutputPiped } = options;
+  const results: string[] = [];
+
+  // Map phase: process each item
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!.trim();
+    if (!item) continue;
+
+    if (!isOutputPiped) {
+      console.error(pc.cyan(`\n[${ i + 1}/${items.length}] Processing: ${item}`));
+    }
+
+    const itemPrompt = prompt ? `${item}\n\n${prompt}` : item;
+
+    // Capture output instead of streaming to stdout
+    const useTools = provider.supportsTools;
+    const messages: Message[] = [];
+
+    if (streamOptions.systemPrompt) {
+      messages.push({ role: 'system', content: streamOptions.systemPrompt });
+    }
+    messages.push({ role: 'user', content: itemPrompt });
+
+    const mapStreamOpts: StreamOptions = {
+      ...streamOptions,
+      messages,
+      tools: useTools ? getToolDefinitions() : undefined,
+    };
+
+    let loopCount = 0;
+    const maxLoops = 10;
+    let finalText = '';
+
+    while (loopCount < maxLoops) {
+      loopCount++;
+
+      const { text, toolCalls } = await streamResponse(provider, itemPrompt, mapStreamOpts, false, false);
+
+      const assistantMsg: Message = { role: 'assistant', content: text };
+      if (toolCalls.length > 0) {
+        assistantMsg.tool_calls = toolCalls;
+      }
+      messages.push(assistantMsg);
+      finalText = text;
+
+      if (toolCalls.length === 0) {
+        break;
+      }
+
+      // Execute tool calls
+      for (const call of toolCalls) {
+        if (verbosity !== 'quiet') {
+          console.error(pc.dim(`🔧 ${call.name}: ${JSON.stringify(call.arguments)}`));
+        }
+
+        const result = await executeTool(call, async (tool, args) => {
+          if (tool.requiresConfirmation?.(args)) {
+            return confirmToolExecution(tool.definition.name, args, autoYes);
+          }
+          return true;
+        });
+
+        if (verbosity === 'verbose') {
+          if (result.error) {
+            console.error(pc.red(result.result));
+          } else {
+            console.error(pc.dim(result.result.slice(0, 200) + (result.result.length > 200 ? '...' : '')));
+          }
+        }
+
+        messages.push({
+          role: 'tool',
+          content: result.result,
+          tool_call_id: call.id,
+        });
+      }
+    }
+
+    results.push(`[${item}]\n${finalText}`);
+
+    if (!isOutputPiped) {
+      console.error(pc.dim(finalText.slice(0, 100) + (finalText.length > 100 ? '...' : '')));
+    }
+  }
+
+  // Reduce phase: combine results
+  if (reducePrompt && results.length > 0) {
+    if (!isOutputPiped) {
+      console.error(pc.cyan('\n[Reduce] Combining results...'));
+    }
+
+    const combinedInput = results.join('\n\n---\n\n');
+    const reduceFullPrompt = `${combinedInput}\n\n${reducePrompt}`;
+
+    const { text } = await streamResponse(
+      provider,
+      reduceFullPrompt,
+      { ...streamOptions, messages: [{ role: 'user', content: reduceFullPrompt }] },
+      !isOutputPiped,
+      !isOutputPiped
+    );
+
+    if (isOutputPiped) {
+      process.stdout.write(text + '\n');
+    }
+  } else {
+    // Output all map results
+    for (const result of results) {
+      process.stdout.write(result + '\n\n');
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
@@ -432,26 +557,58 @@ async function main(): Promise<void> {
     return;
   }
 
-  let prompt = args.prompt.join(' ');
+  const prompt = args.prompt.join(' ');
+
+  // Map/Reduce mode
+  if (args.map && mode === 'pipe') {
+    const stdinContent = await readStdin();
+    const items = stdinContent.split('\n').filter(line => line.trim());
+
+    if (items.length === 0) {
+      console.error(pc.red('Error: No input items for map'));
+      process.exit(1);
+    }
+
+    try {
+      await runMapReduce({
+        provider,
+        streamOptions,
+        prompt,
+        items,
+        reducePrompt: args.reduce,
+        verbosity: args.verbosity,
+        autoYes: args.yes,
+        isOutputPiped,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(pc.red(`Error: ${message}`));
+      process.exit(1);
+    }
+    return;
+  }
+
+  // Standard pipe/standalone mode
+  let fullPrompt = prompt;
 
   if (mode === 'pipe') {
     const stdinContent = await readStdin();
     if (stdinContent) {
-      if (prompt) {
-        prompt = `${stdinContent}\n\n${prompt}`;
+      if (fullPrompt) {
+        fullPrompt = `${stdinContent}\n\n${fullPrompt}`;
       } else {
-        prompt = stdinContent;
+        fullPrompt = stdinContent;
       }
     }
   }
 
-  if (!prompt.trim()) {
+  if (!fullPrompt.trim()) {
     console.error(pc.red('Error: No prompt provided'));
     process.exit(1);
   }
 
   try {
-    await runSingleShot(provider, prompt, streamOptions, mode, isOutputPiped, args.verbosity, args.yes);
+    await runSingleShot(provider, fullPrompt, streamOptions, mode, isOutputPiped, args.verbosity, args.yes);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(pc.red(`Error: ${message}`));
