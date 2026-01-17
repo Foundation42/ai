@@ -1,5 +1,9 @@
 # AI CLI
 
+<p align="center">
+  <img src="assets/robot-wave.png" alt="AI CLI Robot" width="256">
+</p>
+
 **An AI that can actually do things.**
 
 Talk to your computer in plain English. Ask questions, run commands, manage files, explore codebases—locally or across your entire infrastructure.
@@ -938,3 +942,12 @@ The AI automatically detects when running under systemd and exits cleanly after 
 ## License
 
 MIT
+
+---
+
+<p align="center">
+  <em>Lovingly crafted by</em><br>
+  <strong>Christian Beaumont</strong> (<a href="https://entrained.ai">Entrained AI Institute</a>)<br>
+  <strong>Claude Code</strong> (<a href="https://anthropic.com">Anthropic</a>)<br>
+  <strong>Gemini</strong> (<a href="https://google.com">Google</a>)
+</p>
