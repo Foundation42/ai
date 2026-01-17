@@ -142,7 +142,7 @@ Options:
 | Provider | Default Model | Tools | API Key |
 |----------|---------------|-------|---------|
 | Google | gemini-2.0-flash | Yes | GOOGLE_API_KEY |
-| Anthropic | claude-sonnet-4-20250514 | No | ANTHROPIC_API_KEY |
+| Anthropic | claude-sonnet-4-20250514 | Yes | ANTHROPIC_API_KEY |
 | OpenAI | gpt-4o-mini | No | OPENAI_API_KEY |
 | Mistral | mistral-small-latest | No | MISTRAL_API_KEY |
 | DeepSeek | deepseek-chat | No | DEEPSEEK_API_KEY |
@@ -150,7 +150,7 @@ Options:
 
 ## Tools
 
-When using a provider with tool support (currently Google), the AI can:
+When using a provider with tool support (Google and Anthropic), the AI can:
 
 | Tool | Description |
 |------|-------------|
