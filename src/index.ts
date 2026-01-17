@@ -85,9 +85,23 @@ async function streamResponse(
   return { text: fullText, toolCalls };
 }
 
-async function confirmToolExecution(command: string): Promise<boolean> {
+function formatConfirmation(toolName: string, args: Record<string, unknown>): string {
+  if (toolName === 'bash') {
+    return String(args.command || '');
+  }
+  if (toolName === 'edit_file') {
+    const path = String(args.path || '');
+    const oldStr = String(args.old_string || '').slice(0, 50);
+    const newStr = String(args.new_string || '').slice(0, 50);
+    return `Edit ${path}: "${oldStr}${oldStr.length >= 50 ? '...' : ''}" → "${newStr}${newStr.length >= 50 ? '...' : ''}"`;
+  }
+  return JSON.stringify(args);
+}
+
+async function confirmToolExecution(toolName: string, args: Record<string, unknown>): Promise<boolean> {
+  const display = formatConfirmation(toolName, args);
   return new Promise((resolve) => {
-    process.stdout.write(pc.yellow(`\n⚠ Execute: ${pc.bold(command)}? [y/N] `));
+    process.stdout.write(pc.yellow(`\n⚠ ${pc.bold(toolName)}: ${display}? [y/N] `));
 
     const onData = (chunk: Buffer) => {
       const char = chunk.toString().toLowerCase();
@@ -153,7 +167,7 @@ async function runSingleShot(
 
       const result = await executeTool(call, async (tool, args) => {
         if (tool.requiresConfirmation?.(args)) {
-          return confirmToolExecution(String(args.command || ''));
+          return confirmToolExecution(tool.definition.name, args);
         }
         return true;
       });
@@ -321,7 +335,7 @@ async function runRepl(provider: Provider, options: StreamOptions, verbosity: Ve
 
           const result = await executeTool(call, async (tool, args) => {
             if (tool.requiresConfirmation?.(args)) {
-              return confirmToolExecution(String(args.command || ''));
+              return confirmToolExecution(tool.definition.name, args);
             }
             return true;
           });
