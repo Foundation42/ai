@@ -3,7 +3,7 @@ import { BashTool } from './bash';
 import { ReadFileTool } from './read_file';
 import { ListFilesTool } from './list_files';
 import { EditFileTool } from './edit_file';
-import { FleetQueryTool, FleetListTool, FleetBroadcastTool, FleetUpgradeTool } from './fleet';
+import { FleetQueryTool, FleetListTool, FleetBroadcastTool, FleetUpgradeTool, FleetRestartTool } from './fleet';
 import { VersionTool } from './version';
 import { MCPAddTool, MCPRemoveTool, MCPUpdateTool, MCPListTool } from './mcp_manage';
 
@@ -23,6 +23,7 @@ tools.set('fleet_query', new FleetQueryTool());
 tools.set('fleet_list', new FleetListTool());
 tools.set('fleet_broadcast', new FleetBroadcastTool());
 tools.set('fleet_upgrade', new FleetUpgradeTool());
+tools.set('fleet_restart', new FleetRestartTool());
 
 // Register MCP management tools
 tools.set('mcp_add', new MCPAddTool());

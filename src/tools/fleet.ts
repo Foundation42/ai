@@ -5,6 +5,7 @@ import {
   queryFleetNodes,
   getFleetHealth,
   upgradeFleetNode,
+  restartFleetNode,
   type FleetConfig,
 } from '../fleet';
 
@@ -208,6 +209,54 @@ export class FleetUpgradeTool implements Tool {
     const results: string[] = [];
     for (const node of nodes) {
       const result = await upgradeFleetNode(node, action === 'upgrade', config.tls);
+      results.push(`@${node.name}: ${result.message}`);
+    }
+
+    return results.join('\n');
+  }
+}
+
+export class FleetRestartTool implements Tool {
+  definition: ToolDefinition = {
+    name: 'fleet_restart',
+    description: 'Restart fleet nodes to apply configuration changes or recover from issues. The node will exit gracefully and systemd will restart it.',
+    parameters: {
+      type: 'object',
+      properties: {
+        node: {
+          type: 'string',
+          description: 'Name of the fleet node to restart, or "all" for all nodes',
+        },
+      },
+      required: ['node'],
+    },
+  };
+
+  async execute(args: Record<string, unknown>): Promise<string> {
+    const nodeName = String(args.node || '').toLowerCase();
+
+    if (!nodeName) {
+      return 'Error: node name is required';
+    }
+
+    const config = getConfig();
+
+    if (config.nodes.length === 0) {
+      return 'Error: No fleet nodes configured';
+    }
+
+    const nodes = nodeName === 'all'
+      ? config.nodes
+      : config.nodes.filter(n => n.name.toLowerCase() === nodeName);
+
+    if (nodes.length === 0) {
+      const available = config.nodes.map(n => n.name).join(', ');
+      return `Error: Unknown node "${nodeName}". Available nodes: ${available}`;
+    }
+
+    const results: string[] = [];
+    for (const node of nodes) {
+      const result = await restartFleetNode(node, config.tls);
       results.push(`@${node.name}: ${result.message}`);
     }
 

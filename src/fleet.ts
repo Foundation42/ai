@@ -324,3 +324,67 @@ export async function upgradeFleetNode(
     };
   }
 }
+
+export interface RestartResult {
+  success: boolean;
+  message: string;
+  version?: string;
+}
+
+/**
+ * Restart a fleet node
+ */
+export async function restartFleetNode(
+  node: FleetNode,
+  fleetTLS?: FleetTLSConfig
+): Promise<RestartResult> {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (node.token) {
+      headers['Authorization'] = `Bearer ${node.token}`;
+    }
+
+    const tlsOptions = buildTLSFetchOptions(node, fleetTLS);
+    const response = await fetch(`${node.url}/v1/fleet/restart`, {
+      method: 'POST',
+      headers,
+      signal: AbortSignal.timeout(10000),
+      ...tlsOptions,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        success: false,
+        message: `HTTP ${response.status}: ${error}`,
+      };
+    }
+
+    const data = await response.json() as {
+      success?: boolean;
+      message: string;
+      version?: string;
+    };
+
+    return {
+      success: data.success !== false,
+      message: data.message,
+      version: data.version,
+    };
+  } catch (err) {
+    // Connection reset is expected when server restarts
+    if (err instanceof Error && (err.message.includes('ECONNRESET') || err.message.includes('socket'))) {
+      return {
+        success: true,
+        message: 'Server restarting (connection closed)',
+      };
+    }
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
