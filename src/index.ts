@@ -8,6 +8,7 @@ import { readStdin, filterThinking } from './utils/stream';
 import { renderMarkdown } from './utils/markdown';
 import { appendHistory } from './history';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
+import { readline } from './utils/readline';
 
 const VERSION = '0.1.0';
 
@@ -258,6 +259,7 @@ async function runSingleShot(
 async function runRepl(provider: Provider, options: StreamOptions, verbosity: Verbosity, autoYes: boolean): Promise<void> {
   const messages: Message[] = [];
   const useTools = provider.supportsTools;
+  let commandHistory: string[] = [];
 
   // Add system prompt: user-provided takes priority, otherwise use tool prompt if tools available
   const systemPrompt = options.systemPrompt || (useTools ? TOOL_SYSTEM_PROMPT : undefined);
@@ -272,51 +274,18 @@ async function runRepl(provider: Provider, options: StreamOptions, verbosity: Ve
   }
   console.log(pc.dim('Type "exit" or Ctrl+C to quit, "clear" to reset context\n'));
 
-  const promptUser = async (): Promise<string | null> => {
-    return new Promise((resolve) => {
-      process.stdout.write(pc.green('> '));
-
-      let input = '';
-      const onData = (chunk: Buffer) => {
-        const str = chunk.toString();
-        for (const char of str) {
-          if (char === '\n' || char === '\r') {
-            process.stdin.removeListener('data', onData);
-            process.stdin.setRawMode?.(false);
-            resolve(input);
-            return;
-          } else if (char === '\x03') {
-            process.stdin.removeListener('data', onData);
-            process.stdin.setRawMode?.(false);
-            resolve(null);
-            return;
-          } else if (char === '\x7f' || char === '\b') {
-            if (input.length > 0) {
-              input = input.slice(0, -1);
-              process.stdout.write('\b \b');
-            }
-          } else if (char >= ' ') {
-            input += char;
-            process.stdout.write(char);
-          }
-        }
-      };
-
-      process.stdin.setRawMode?.(true);
-      process.stdin.resume();
-      process.stdin.on('data', onData);
-    });
-  };
-
   while (true) {
-    const input = await promptUser();
+    const { line: input, history } = await readline({
+      prompt: pc.green('> '),
+      history: commandHistory,
+    });
+    commandHistory = history;
 
     if (input === null) {
-      console.log(pc.dim('\nGoodbye!'));
+      console.log(pc.dim('Goodbye!'));
       break;
     }
 
-    console.log();
     const trimmed = input.trim();
 
     if (!trimmed) continue;
