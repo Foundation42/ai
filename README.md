@@ -191,6 +191,34 @@ src/
     └── markdown.ts   # Terminal markdown rendering
 ```
 
+## Fleet Orchestration
+
+Configure remote AI nodes and query them with @ mentions:
+
+```bash
+# Configure fleet in ~/.aiconfig
+AI_FLEET_NODES=server1:http://10.0.1.10:9090,server2:http://10.0.1.11:9090
+AI_FLEET_TOKEN=your-fleet-token
+
+# Query specific nodes with @ mentions
+ai "@server1 what's your disk usage?"
+ai "@server2 check if nginx is running"
+
+# Query all nodes
+ai "@all report your memory usage"
+
+# Let AI figure it out
+ai "Which server has the highest load?"
+```
+
+### Fleet Tools
+
+| Tool | Description |
+|------|-------------|
+| `fleet_list` | List all fleet nodes and health status |
+| `fleet_query` | Query a specific node |
+| `fleet_broadcast` | Send prompt to all nodes |
+
 ## Server Mode
 
 Run as an OpenAI-compatible API server with fleet management capabilities:

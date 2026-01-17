@@ -18,12 +18,20 @@ Available tools:
 - read_file: Read file contents
 - list_files: List directory contents
 - edit_file: Make targeted edits to files
+- fleet_list: List all configured fleet nodes and their health
+- fleet_query: Query a remote fleet node (params: node, prompt)
+- fleet_broadcast: Send a prompt to ALL fleet nodes
 
 Use tools proactively when they would help answer the user's question. For example:
 - "What time is it?" → Use bash with "date"
 - "What's in this directory?" → Use list_files or bash with "ls"
 - "Show me the contents of config.json" → Use read_file
 - "What's my IP address?" → Use bash with "curl ifconfig.me" or similar
+- "Check disk space on server1" → Use fleet_query with node="server1"
+- "What's the status of all servers?" → Use fleet_broadcast
+
+When a user mentions @nodename, use fleet_query to query that specific node.
+When a user mentions @all, use fleet_broadcast to query all nodes.
 
 Always try to use your tools to get real, accurate information rather than saying you can't help.`;
 

@@ -3,6 +3,7 @@ import { BashTool } from './bash';
 import { ReadFileTool } from './read_file';
 import { ListFilesTool } from './list_files';
 import { EditFileTool } from './edit_file';
+import { FleetQueryTool, FleetListTool, FleetBroadcastTool } from './fleet';
 
 export type { Tool, ToolDefinition, ToolCall, ToolResult } from './types';
 
@@ -13,6 +14,11 @@ tools.set('bash', new BashTool());
 tools.set('read_file', new ReadFileTool());
 tools.set('list_files', new ListFilesTool());
 tools.set('edit_file', new EditFileTool());
+
+// Register fleet tools
+tools.set('fleet_query', new FleetQueryTool());
+tools.set('fleet_list', new FleetListTool());
+tools.set('fleet_broadcast', new FleetBroadcastTool());
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);
