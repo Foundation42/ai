@@ -1190,11 +1190,43 @@ The killer feature: tasks can automatically delegate to peer nodes when the loca
 ```
 
 When load exceeds the threshold:
-1. The node checks its configured peer nodes
-2. Sends the handoff prompt to the first available peer
-3. The peer executes the task instead
+1. The node selects the next peer using **round-robin** for fair distribution
+2. Sends the handoff prompt to the selected peer
+3. If that peer fails, tries the next peer in rotation
+4. Tracks per-peer success rates and health
 
-This enables collaborative load balancing across your fleet mesh.
+**Round-Robin Load Balancing:**
+
+Handoffs use intelligent round-robin selection:
+- Each handoff picks the next peer in rotation
+- Unhealthy peers (3+ consecutive failures) are skipped
+- Failed peers are automatically retried after 5-minute cooldown
+- Per-peer statistics track success rates
+
+Check handoff stats via the scheduler API:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/v1/scheduler | jq '.handoff'
+```
+
+```json
+{
+  "lastPeerIndex": 1,
+  "peers": [
+    {
+      "name": "node2",
+      "handoffs": 15,
+      "successes": 14,
+      "failures": 1,
+      "successRate": 93,
+      "consecutiveFailures": 0,
+      "healthy": true
+    }
+  ]
+}
+```
+
+This enables collaborative load balancing across your fleet mesh with automatic failover.
 
 ### Task State
 
