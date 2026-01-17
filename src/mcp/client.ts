@@ -4,6 +4,7 @@
  */
 
 import { createStdioTransport, type StdioTransport } from './transport';
+import { createHTTPTransport, type HTTPTransport } from './http-transport';
 import type {
   MCPServerConfig,
   MCPToolDefinition,
@@ -20,6 +21,9 @@ import type {
 } from './types';
 
 const PROTOCOL_VERSION = '2025-11-25';
+
+// Common transport interface
+type Transport = StdioTransport | HTTPTransport;
 
 export interface MCPClient {
   readonly serverInfo: EntityInfo | null;
@@ -40,7 +44,8 @@ export async function createMCPClient(
   name: string,
   config: MCPServerConfig
 ): Promise<MCPClient> {
-  let transport: StdioTransport | null = null;
+  let transport: Transport | null = null;
+  const isRemote = !!config.url;
   let requestId = 0;
   let serverInfo: EntityInfo | null = null;
   let capabilities: ServerCapabilities | null = null;
@@ -104,8 +109,17 @@ export async function createMCPClient(
     },
 
     async connect(): Promise<void> {
-      // Spawn the server process
-      transport = await createStdioTransport(config);
+      // Connect to the server (local stdio or remote HTTP)
+      if (isRemote) {
+        transport = await createHTTPTransport({
+          url: config.url!,
+          headers: config.headers,
+        });
+      } else if (config.command) {
+        transport = await createStdioTransport(config as Required<Pick<MCPServerConfig, 'command'>>);
+      } else {
+        throw new Error('MCP server config must have either "url" or "command"');
+      }
 
       // Send initialize request
       const initParams: InitializeParams = {

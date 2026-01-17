@@ -50,12 +50,17 @@ export interface ServerConfig {
   autoConfirm?: boolean;  // Auto-confirm dangerous commands (use with caution)
 }
 
-// MCP Server configuration
+// MCP Server configuration (local stdio or remote SSE)
 export interface MCPServerConfig {
-  command: string;           // Command to run (e.g., "npx", "python")
+  // For local stdio servers:
+  command?: string;          // Command to run (e.g., "npx", "python")
   args?: string[];           // Arguments to pass
   env?: Record<string, string>;  // Environment variables
   cwd?: string;              // Working directory
+  // For remote SSE servers:
+  url?: string;              // SSE endpoint URL (e.g., "https://mcp.example.com/sse")
+  headers?: Record<string, string>;  // HTTP headers (e.g., auth tokens)
+  // Common:
   description?: string;      // Human-readable description
 }
 
