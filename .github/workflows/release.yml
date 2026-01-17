@@ -43,7 +43,7 @@ jobs:
       - name: Build binary
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          bun build src/index.ts --compile --minify --target=${{ matrix.target }} --define "__VERSION__='\"${VERSION}\"'" --outfile ${{ matrix.artifact }}
+          bun build src/index.ts --compile --minify --target=${{ matrix.target }} --define "__VERSION__=\"${VERSION}\"" --outfile ${{ matrix.artifact }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
