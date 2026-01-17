@@ -1,4 +1,12 @@
 import { existsSync, unlinkSync, renameSync, chmodSync, writeFileSync } from 'fs';
+
+/**
+ * Check if running under systemd
+ */
+function isRunningUnderSystemd(): boolean {
+  // INVOCATION_ID is set by systemd for all services
+  return !!process.env.INVOCATION_ID;
+}
 import { join, dirname } from 'path';
 
 const GITHUB_REPO = 'Foundation42/ai';
@@ -283,13 +291,24 @@ export async function performUpgrade(
     console.log(`Upgraded from v${currentVersion} to v${release.version}`);
 
     if (restart) {
+      // If running under systemd, just exit - systemd will restart us with the new binary
+      if (isRunningUnderSystemd()) {
+        console.log('Running under systemd, exiting for restart...');
+        return {
+          success: true,
+          message: `Upgraded to v${release.version}, systemd will restart...`,
+          currentVersion,
+          latestVersion: release.version,
+          restarting: true,
+        };
+      }
+
+      // Not under systemd - use manual restart script
       console.log('Restarting...');
 
-      // Create a restart script that waits for this process to exit, then starts the new one
       const pid = process.pid;
       const args = process.argv.slice(1).map(a => `"${a}"`).join(' ');
       const restartScript = `/tmp/ai-restart-${pid}.sh`;
-      const logFile = '/tmp/ai-restart.log';
 
       // Script waits for old process to exit, then starts new binary with same args
       const script = `#!/bin/bash
