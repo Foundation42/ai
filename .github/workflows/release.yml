@@ -18,6 +18,12 @@ jobs:
             artifact: ai-linux-x64
           - target: bun-linux-arm64
             artifact: ai-linux-arm64
+          - target: bun-darwin-x64
+            artifact: ai-macos-x64
+          - target: bun-darwin-arm64
+            artifact: ai-macos-arm64
+          - target: bun-windows-x64
+            artifact: ai-windows-x64.exe
 
     steps:
       - name: Checkout
@@ -69,7 +75,10 @@ jobs:
           mkdir -p release
           mv artifacts/ai-linux-x64/ai-linux-x64 release/ai-linux-x64
           mv artifacts/ai-linux-arm64/ai-linux-arm64 release/ai-linux-arm64
-          chmod +x release/*
+          mv artifacts/ai-macos-x64/ai-macos-x64 release/ai-macos-x64
+          mv artifacts/ai-macos-arm64/ai-macos-arm64 release/ai-macos-arm64
+          mv artifacts/ai-windows-x64.exe/ai-windows-x64.exe release/ai-windows-x64.exe
+          chmod +x release/ai-linux-* release/ai-macos-*
           cd release
           sha256sum * > checksums.txt
 
@@ -79,6 +88,9 @@ jobs:
           files: |
             release/ai-linux-x64
             release/ai-linux-arm64
+            release/ai-macos-x64
+            release/ai-macos-arm64
+            release/ai-windows-x64.exe
             release/checksums.txt
           generate_release_notes: true
           draft: false

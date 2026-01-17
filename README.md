@@ -28,12 +28,14 @@ ai "deploy the latest version to @production"
 ## Quick Start
 
 ```bash
-# Install (Linux)
+# Install (Linux/macOS)
 curl -fsSL https://raw.githubusercontent.com/Foundation42/ai/main/install.sh | bash
 
 # Run - it will guide you through setup!
 ai
 ```
+
+Windows users: download `ai-windows-x64.exe` from [releases](https://github.com/Foundation42/ai/releases).
 
 ## How It's Different
 

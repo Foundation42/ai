@@ -7,25 +7,38 @@ set -e
 REPO="Foundation42/ai"
 INSTALL_DIR="${AI_INSTALL_DIR:-$HOME/.local/bin}"
 
-# Detect architecture
+# Detect OS and architecture
+OS=$(uname -s)
 ARCH=$(uname -m)
-case "$ARCH" in
-  x86_64)  BINARY="ai-linux-x64" ;;
-  aarch64) BINARY="ai-linux-arm64" ;;
-  arm64)   BINARY="ai-linux-arm64" ;;
+
+case "$OS" in
+  Linux)
+    case "$ARCH" in
+      x86_64)  BINARY="ai-linux-x64" ;;
+      aarch64) BINARY="ai-linux-arm64" ;;
+      arm64)   BINARY="ai-linux-arm64" ;;
+      *)
+        echo "Unsupported Linux architecture: $ARCH"
+        exit 1
+        ;;
+    esac
+    ;;
+  Darwin)
+    case "$ARCH" in
+      x86_64) BINARY="ai-macos-x64" ;;
+      arm64)  BINARY="ai-macos-arm64" ;;
+      *)
+        echo "Unsupported macOS architecture: $ARCH"
+        exit 1
+        ;;
+    esac
+    ;;
   *)
-    echo "Unsupported architecture: $ARCH"
+    echo "Unsupported OS: $OS"
+    echo "For Windows, download from: https://github.com/$REPO/releases"
     exit 1
     ;;
 esac
-
-# Detect OS
-OS=$(uname -s)
-if [ "$OS" != "Linux" ]; then
-  echo "This installer is for Linux. For other platforms, build from source."
-  echo "See: https://github.com/$REPO"
-  exit 1
-fi
 
 echo "Installing AI CLI..."
 echo ""
