@@ -47,6 +47,7 @@ export interface ServerConfig {
   port?: number;
   token?: string;
   tls?: ServerTLSConfig;
+  autoConfirm?: boolean;  // Auto-confirm dangerous commands (use with caution)
 }
 
 export interface AIConfig {
@@ -209,6 +210,14 @@ export function getServerTLSConfig(): ServerTLSConfig | undefined {
 export function getFleetTLSConfig(): FleetTLSConfig | undefined {
   const config = loadConfig();
   return config.fleet?.tls;
+}
+
+/**
+ * Get server autoConfirm setting
+ */
+export function getServerAutoConfirm(): boolean {
+  const config = loadConfig();
+  return config.server?.autoConfirm ?? false;
 }
 
 export type Verbosity = 'quiet' | 'normal' | 'verbose';
@@ -383,6 +392,7 @@ export function createTemplateConfig(): void {
     server: {
       port: 9090,
       token: "your-server-token",
+      autoConfirm: true,  // Allow dangerous commands like systemctl
       tls: {
         cert: "~/.config/ai/certs/server.pem",
         key: "~/.config/ai/certs/server-key.pem",

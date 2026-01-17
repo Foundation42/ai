@@ -1,12 +1,15 @@
 import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
-import { getDefaultSystemPrompt, loadCertFile, type ServerTLSConfig } from './config';
+import { getDefaultSystemPrompt, loadCertFile, getServerAutoConfirm, type ServerTLSConfig } from './config';
 import { checkForUpgrade, performUpgrade } from './upgrade';
 import pc from 'picocolors';
 
 // Version is injected at build time via --define
 declare const __VERSION__: string;
 const VERSION = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.1.0-dev';
+
+// Confirmation function for tool execution - respects server autoConfirm setting
+const serverConfirmFn = async () => getServerAutoConfirm();
 
 const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the user's system.
 
@@ -235,7 +238,7 @@ async function handleStreamingResponse(
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
           } else if (chunk.type === 'tool_call') {
             // Execute tool and continue
-            const result = await executeTool(chunk.call, async () => true);
+            const result = await executeTool(chunk.call, serverConfirmFn);
             const data = {
               id,
               object: 'chat.completion.chunk',
@@ -314,7 +317,7 @@ async function handleNonStreamingResponse(
 
     for (const call of currentToolCalls) {
       toolCalls.push(call);
-      const result = await executeTool(call, async () => true);
+      const result = await executeTool(call, serverConfirmFn);
       messages.push({
         role: 'tool',
         content: result.result,
@@ -389,7 +392,7 @@ async function handleFleetExecute(req: Request): Promise<Response> {
     messages.push(assistantMsg);
 
     for (const call of toolCalls) {
-      const result = await executeTool(call, async () => true);
+      const result = await executeTool(call, serverConfirmFn);
       toolResults.push({ name: call.name, result: result.result });
       messages.push({
         role: 'tool',
