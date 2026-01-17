@@ -1,6 +1,7 @@
 import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
 import { getDefaultSystemPrompt } from './config';
+import { checkForUpgrade, performUpgrade } from './upgrade';
 import pc from 'picocolors';
 
 // Version is injected at build time via --define
@@ -74,10 +75,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
   const token = config.token || process.env.AI_SERVER_TOKEN || generateToken();
   const showToken = !config.token && !process.env.AI_SERVER_TOKEN;
 
-  console.log(pc.cyan(`\n🚀 AI Server starting on port ${config.port}`));
+  console.log(pc.cyan(`\n🚀 AI Server v${VERSION} starting on port ${config.port}`));
   console.log(pc.dim(`   OpenAI-compatible: POST /v1/chat/completions`));
   console.log(pc.dim(`   Fleet execute:     POST /v1/fleet/execute`));
   console.log(pc.dim(`   Fleet health:      GET  /v1/fleet/health`));
+  console.log(pc.dim(`   Fleet upgrade:     GET/POST /v1/fleet/upgrade`));
   console.log(pc.dim(`   List models:       GET  /v1/models`));
 
   if (showToken) {
@@ -130,6 +132,16 @@ export async function startServer(config: ServerConfig): Promise<void> {
         // Fleet health
         if (url.pathname === '/v1/fleet/health' && req.method === 'GET') {
           return handleFleetHealth();
+        }
+
+        // Fleet upgrade check
+        if (url.pathname === '/v1/fleet/upgrade' && req.method === 'GET') {
+          return await handleUpgradeCheck();
+        }
+
+        // Fleet upgrade perform
+        if (url.pathname === '/v1/fleet/upgrade' && req.method === 'POST') {
+          return await handleUpgradePerform();
         }
 
         return jsonResponse({ error: { message: 'Not found', type: 'not_found' } }, 404);
@@ -425,6 +437,51 @@ function jsonResponse(data: unknown, status = 200): Response {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
     },
+  });
+}
+
+async function handleUpgradeCheck(): Promise<Response> {
+  const check = await checkForUpgrade(VERSION);
+
+  return jsonResponse({
+    currentVersion: check.currentVersion,
+    latestVersion: check.latestVersion,
+    upgradeAvailable: check.available,
+    message: check.available
+      ? `Upgrade available: v${check.currentVersion} -> v${check.latestVersion}`
+      : `Already at latest version (v${check.currentVersion})`,
+  });
+}
+
+async function handleUpgradePerform(): Promise<Response> {
+  console.log(pc.yellow('Upgrade requested...'));
+
+  const result = await performUpgrade(VERSION, { restart: true });
+
+  if (result.restarting) {
+    // Send response before exiting
+    const response = jsonResponse({
+      success: true,
+      message: result.message,
+      currentVersion: result.currentVersion,
+      latestVersion: result.latestVersion,
+      restarting: true,
+    });
+
+    // Schedule exit after response is sent
+    setTimeout(() => {
+      console.log(pc.green('Upgrade complete, exiting...'));
+      process.exit(0);
+    }, 100);
+
+    return response;
+  }
+
+  return jsonResponse({
+    success: result.success,
+    message: result.message,
+    currentVersion: result.currentVersion,
+    latestVersion: result.latestVersion,
   });
 }
 

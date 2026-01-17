@@ -4,6 +4,7 @@ import {
   queryFleetNode,
   queryFleetNodes,
   getFleetHealth,
+  upgradeFleetNode,
   type FleetConfig,
 } from '../fleet';
 
@@ -157,5 +158,59 @@ export class FleetBroadcastTool implements Tool {
     }
 
     return lines.join('\n');
+  }
+}
+
+export class FleetUpgradeTool implements Tool {
+  definition: ToolDefinition = {
+    name: 'fleet_upgrade',
+    description: 'Check for and perform upgrades on fleet nodes. Use "check" action to see available updates, or "upgrade" to perform the upgrade.',
+    parameters: {
+      type: 'object',
+      properties: {
+        node: {
+          type: 'string',
+          description: 'Name of the fleet node to upgrade, or "all" for all nodes',
+        },
+        action: {
+          type: 'string',
+          enum: ['check', 'upgrade'],
+          description: 'Action to perform: "check" to see if updates available, "upgrade" to perform upgrade',
+        },
+      },
+      required: ['node', 'action'],
+    },
+  };
+
+  async execute(args: Record<string, unknown>): Promise<string> {
+    const nodeName = String(args.node || '').toLowerCase();
+    const action = String(args.action || 'check').toLowerCase();
+
+    if (!nodeName) {
+      return 'Error: node name is required';
+    }
+
+    const config = getConfig();
+
+    if (config.nodes.length === 0) {
+      return 'Error: No fleet nodes configured';
+    }
+
+    const nodes = nodeName === 'all'
+      ? config.nodes
+      : config.nodes.filter(n => n.name.toLowerCase() === nodeName);
+
+    if (nodes.length === 0) {
+      const available = config.nodes.map(n => n.name).join(', ');
+      return `Error: Unknown node "${nodeName}". Available nodes: ${available}`;
+    }
+
+    const results: string[] = [];
+    for (const node of nodes) {
+      const result = await upgradeFleetNode(node, action === 'upgrade');
+      results.push(`@${node.name}: ${result.message}`);
+    }
+
+    return results.join('\n');
   }
 }

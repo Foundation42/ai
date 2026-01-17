@@ -221,3 +221,63 @@ export async function getFleetHealth(config: FleetConfig): Promise<Array<{ node:
 
   return results;
 }
+
+export interface UpgradeResult {
+  success: boolean;
+  message: string;
+  currentVersion?: string;
+  latestVersion?: string;
+}
+
+/**
+ * Check for or perform upgrade on a fleet node
+ */
+export async function upgradeFleetNode(
+  node: FleetNode,
+  performUpgrade: boolean = false
+): Promise<UpgradeResult> {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (node.token) {
+      headers['Authorization'] = `Bearer ${node.token}`;
+    }
+
+    const method = performUpgrade ? 'POST' : 'GET';
+    const response = await fetch(`${node.url}/v1/fleet/upgrade`, {
+      method,
+      headers,
+      signal: AbortSignal.timeout(60000), // Longer timeout for upgrades
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        success: false,
+        message: `HTTP ${response.status}: ${error}`,
+      };
+    }
+
+    const data = await response.json() as {
+      success?: boolean;
+      message: string;
+      currentVersion?: string;
+      latestVersion?: string;
+      upgradeAvailable?: boolean;
+    };
+
+    return {
+      success: data.success !== false,
+      message: data.message,
+      currentVersion: data.currentVersion,
+      latestVersion: data.latestVersion,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
