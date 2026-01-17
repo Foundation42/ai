@@ -399,6 +399,10 @@ Create `~/.config/ai/config.json` (or run `ai --config-init` to generate a templ
     "port": 9443,
     "token": "your-server-token",
     "autoConfirm": true,
+    "autoUpgrade": {
+      "enabled": true,
+      "interval": 60000
+    },
     "tls": {
       "cert": "~/.config/ai/certs/server.pem",
       "key": "~/.config/ai/certs/server-key.pem",
@@ -439,6 +443,8 @@ Create `~/.config/ai/config.json` (or run `ai --config-init` to generate a templ
 | Section | Option | Description |
 |---------|--------|-------------|
 | `server.autoConfirm` | boolean | Auto-confirm dangerous commands (systemctl, sudo, etc.) |
+| `server.autoUpgrade.enabled` | boolean | Enable automatic upgrade polling (default: false) |
+| `server.autoUpgrade.interval` | number | Poll interval in milliseconds (default: 60000) |
 | `server.tls.cert` | path | Server certificate for HTTPS |
 | `server.tls.key` | path | Server private key |
 | `server.tls.ca` | path | CA certificate for client verification (enables mTLS) |
@@ -672,6 +678,7 @@ ai "Which server has the highest load?"
 | `fleet_query` | Query a specific node |
 | `fleet_broadcast` | Send prompt to all nodes |
 | `fleet_upgrade` | Check for and perform upgrades on fleet nodes |
+| `fleet_restart` | Restart fleet nodes to apply config changes |
 
 ### Fleet Tutorial
 
@@ -854,6 +861,7 @@ ai --server --port 8080 --token mysecret
 | `/v1/fleet/health` | GET | Node health info (no auth) |
 | `/v1/fleet/upgrade` | GET | Check for available upgrades |
 | `/v1/fleet/upgrade` | POST | Perform upgrade and restart |
+| `/v1/fleet/restart` | POST | Restart the server (for config changes) |
 
 ### Examples
 
@@ -918,7 +926,9 @@ curl --cacert ca.pem https://10.0.1.10:9443/v1/fleet/health
 
 ## Auto-Upgrade
 
-Fleet nodes can upgrade themselves from GitHub releases:
+Fleet nodes can upgrade themselves from GitHub releases—either on-demand or automatically via polling.
+
+### On-Demand Upgrades
 
 ```bash
 # Check for upgrades
@@ -931,11 +941,46 @@ ai "upgrade all fleet nodes"
 ai "@server1 upgrade yourself"
 ```
 
-When a node upgrades:
+### Automatic Upgrade Polling
+
+Enable automatic upgrades so fleet nodes check for and install updates without intervention:
+
+```json
+{
+  "server": {
+    "autoUpgrade": {
+      "enabled": true,
+      "interval": 60000
+    }
+  }
+}
+```
+
+When enabled, fleet nodes will:
+- Check GitHub releases at the configured interval (default: every 60 seconds)
+- Automatically download and install new versions
+- Restart gracefully via systemd
+- Persist upgrade state to `~/.config/ai/upgrade-state.json`
+
+### Remote Restart
+
+Apply configuration changes without SSH access:
+
+```bash
+# Restart a single node
+ai "restart @server1"
+
+# Restart all nodes
+ai "restart all fleet nodes"
+```
+
+### How Upgrades Work
+
 1. Downloads the new binary from GitHub releases
 2. Verifies the SHA256 checksum
-3. Replaces the current binary
-4. Restarts automatically (via systemd or restart script)
+3. Backs up the current binary
+4. Replaces with the new version
+5. Restarts automatically (via systemd or restart script)
 
 ## systemd Integration
 
