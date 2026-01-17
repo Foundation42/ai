@@ -6,7 +6,7 @@ import { GoogleProvider } from './google';
 import { MistralProvider } from './mistral';
 import { DeepSeekProvider } from './deepseek';
 
-export type { Provider, ProviderConfig, StreamOptions, Message } from './types';
+export type { Provider, ProviderConfig, StreamOptions, Message, StreamChunk } from './types';
 
 export type ProviderName = 'ollama' | 'openai' | 'anthropic' | 'google' | 'mistral' | 'deepseek';
 

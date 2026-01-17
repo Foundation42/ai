@@ -1,8 +1,9 @@
-import type { Provider, ProviderConfig, StreamOptions, Message } from './types';
+import type { Provider, ProviderConfig, StreamOptions, Message, StreamChunk } from './types';
 
 export class AnthropicProvider implements Provider {
   name = 'anthropic';
   defaultModel = 'claude-sonnet-4-20250514';
+  supportsTools = false;  // TODO: Add tool support
   private apiKey: string;
   private baseUrl: string;
 
@@ -14,7 +15,7 @@ export class AnthropicProvider implements Provider {
     }
   }
 
-  async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<string> {
+  async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<StreamChunk> {
     if (!this.apiKey) {
       throw new Error('Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.');
     }
@@ -81,7 +82,7 @@ export class AnthropicProvider implements Provider {
           try {
             const data = JSON.parse(trimmed.slice(6));
             if (data.type === 'content_block_delta' && data.delta?.text) {
-              yield data.delta.text;
+              yield { type: 'text', content: data.delta.text };
             }
           } catch {
             // Skip invalid JSON lines

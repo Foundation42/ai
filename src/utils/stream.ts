@@ -1,32 +1,24 @@
-import type { Provider, StreamOptions } from '../providers';
-
-export async function streamToStdout(
-  provider: Provider,
-  prompt: string,
-  options?: StreamOptions
-): Promise<void> {
-  const stream = provider.stream(prompt, options);
-
-  for await (const chunk of stream) {
-    process.stdout.write(chunk);
-  }
-
-  // Ensure we end with a newline
-  process.stdout.write('\n');
-}
+import type { StreamChunk } from '../providers';
 
 /**
  * Filters out <think>...</think> blocks from a stream.
  * Handles tags that may be split across chunks.
+ * Passes through tool_call chunks unchanged.
  */
 export async function* filterThinking(
-  stream: AsyncIterable<string>
-): AsyncIterable<string> {
+  stream: AsyncIterable<StreamChunk>
+): AsyncIterable<StreamChunk> {
   let buffer = '';
   let inThinking = false;
 
   for await (const chunk of stream) {
-    buffer += chunk;
+    // Pass through tool calls unchanged
+    if (chunk.type === 'tool_call') {
+      yield chunk;
+      continue;
+    }
+
+    buffer += chunk.content;
 
     while (buffer.length > 0) {
       if (inThinking) {
@@ -52,7 +44,7 @@ export async function* filterThinking(
         if (openIdx !== -1) {
           // Output everything before <think>
           if (openIdx > 0) {
-            yield buffer.slice(0, openIdx);
+            yield { type: 'text', content: buffer.slice(0, openIdx) };
           }
           buffer = buffer.slice(openIdx + 7);
           inThinking = true;
@@ -60,7 +52,7 @@ export async function* filterThinking(
           // No <think> tag found
           // Keep last 6 chars in buffer in case "<think>" is split across chunks
           if (buffer.length > 6) {
-            yield buffer.slice(0, -6);
+            yield { type: 'text', content: buffer.slice(0, -6) };
             buffer = buffer.slice(-6);
           }
           break;
@@ -71,7 +63,7 @@ export async function* filterThinking(
 
   // Output any remaining buffer (if not in thinking mode)
   if (!inThinking && buffer.length > 0) {
-    yield buffer;
+    yield { type: 'text', content: buffer };
   }
 }
 

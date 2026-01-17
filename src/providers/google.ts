@@ -1,8 +1,10 @@
-import type { Provider, ProviderConfig, StreamOptions, Message } from './types';
+import type { Provider, ProviderConfig, StreamOptions, Message, StreamChunk } from './types';
+import type { ToolDefinition } from '../tools/types';
 
 export class GoogleProvider implements Provider {
   name = 'google';
   defaultModel = 'gemini-2.0-flash';
+  supportsTools = true;
   private apiKey: string;
   private baseUrl: string;
 
@@ -14,15 +16,39 @@ export class GoogleProvider implements Provider {
     }
   }
 
-  private convertMessages(messages: Message[]): Array<{ role: string; parts: Array<{ text: string }> }> {
-    // Convert standard messages to Google format, handling system as user+model pair
-    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+  private convertMessages(messages: Message[]): Array<{ role: string; parts: Array<Record<string, unknown>> }> {
+    const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = [];
 
     for (const msg of messages) {
       if (msg.role === 'system') {
-        // Google doesn't have system role, simulate with user+model pair
         contents.push({ role: 'user', parts: [{ text: msg.content }] });
         contents.push({ role: 'model', parts: [{ text: 'Understood. I will follow these instructions.' }] });
+      } else if (msg.role === 'tool') {
+        // Tool result - add as function response
+        contents.push({
+          role: 'function',
+          parts: [{
+            functionResponse: {
+              name: msg.tool_call_id,
+              response: { result: msg.content },
+            },
+          }],
+        });
+      } else if (msg.role === 'assistant' && msg.tool_calls?.length) {
+        // Assistant with tool calls
+        const parts: Array<Record<string, unknown>> = [];
+        if (msg.content) {
+          parts.push({ text: msg.content });
+        }
+        for (const call of msg.tool_calls) {
+          parts.push({
+            functionCall: {
+              name: call.name,
+              args: call.arguments,
+            },
+          });
+        }
+        contents.push({ role: 'model', parts });
       } else {
         const role = msg.role === 'assistant' ? 'model' : 'user';
         contents.push({ role, parts: [{ text: msg.content }] });
@@ -32,14 +58,24 @@ export class GoogleProvider implements Provider {
     return contents;
   }
 
-  async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<string> {
+  private convertTools(tools: ToolDefinition[]): Array<{ functionDeclarations: Array<Record<string, unknown>> }> {
+    return [{
+      functionDeclarations: tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      })),
+    }];
+  }
+
+  async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<StreamChunk> {
     if (!this.apiKey) {
       throw new Error('Google API key not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY environment variable.');
     }
 
     const model = options.model || this.defaultModel;
 
-    let contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+    let contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
 
     if (options.messages) {
       contents = this.convertMessages(options.messages);
@@ -52,12 +88,18 @@ export class GoogleProvider implements Provider {
       contents.push({ role: 'user', parts: [{ text: prompt }] });
     }
 
+    const body: Record<string, unknown> = { contents };
+
+    if (options.tools?.length) {
+      body.tools = this.convertTools(options.tools);
+    }
+
     const response = await fetch(
       `${this.baseUrl}/models/${model}:streamGenerateContent?key=${this.apiKey}&alt=sse`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents }),
+        body: JSON.stringify(body),
       }
     );
 
@@ -89,9 +131,22 @@ export class GoogleProvider implements Provider {
 
           try {
             const data = JSON.parse(trimmed.slice(6));
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) {
-              yield text;
+            const parts = data.candidates?.[0]?.content?.parts || [];
+
+            for (const part of parts) {
+              if (part.text) {
+                yield { type: 'text', content: part.text };
+              }
+              if (part.functionCall) {
+                yield {
+                  type: 'tool_call',
+                  call: {
+                    id: part.functionCall.name,  // Google doesn't use IDs, use name
+                    name: part.functionCall.name,
+                    arguments: part.functionCall.args || {},
+                  },
+                };
+              }
             }
           } catch {
             // Skip invalid JSON lines

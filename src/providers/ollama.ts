@@ -1,8 +1,9 @@
-import type { Provider, ProviderConfig, StreamOptions } from './types';
+import type { Provider, ProviderConfig, StreamOptions, StreamChunk } from './types';
 
 export class OllamaProvider implements Provider {
   name = 'ollama';
   defaultModel = 'gemma3:4b';
+  supportsTools = false;
   private baseUrl: string;
 
   constructor(config: ProviderConfig = {}) {
@@ -12,7 +13,7 @@ export class OllamaProvider implements Provider {
     }
   }
 
-  async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<string> {
+  async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<StreamChunk> {
     const model = options.model || this.defaultModel;
 
     // Use provided messages or build from prompt
@@ -62,7 +63,7 @@ export class OllamaProvider implements Provider {
           try {
             const data = JSON.parse(line);
             if (data.message?.content) {
-              yield data.message.content;
+              yield { type: 'text', content: data.message.content };
             }
           } catch {
             // Skip invalid JSON lines
@@ -75,7 +76,7 @@ export class OllamaProvider implements Provider {
         try {
           const data = JSON.parse(buffer);
           if (data.message?.content) {
-            yield data.message.content;
+            yield { type: 'text', content: data.message.content };
           }
         } catch {
           // Skip invalid JSON

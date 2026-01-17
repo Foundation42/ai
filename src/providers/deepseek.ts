@@ -1,8 +1,9 @@
-import type { Provider, ProviderConfig, StreamOptions, Message } from './types';
+import type { Provider, ProviderConfig, StreamOptions, Message, StreamChunk } from './types';
 
 export class DeepSeekProvider implements Provider {
   name = 'deepseek';
   defaultModel = 'deepseek-chat';
+  supportsTools = false;
   private apiKey: string;
   private baseUrl: string;
 
@@ -14,7 +15,7 @@ export class DeepSeekProvider implements Provider {
     }
   }
 
-  async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<string> {
+  async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<StreamChunk> {
     if (!this.apiKey) {
       throw new Error('DeepSeek API key not configured. Set DEEPSEEK_API_KEY environment variable.');
     }
@@ -74,7 +75,7 @@ export class DeepSeekProvider implements Provider {
             const data = JSON.parse(trimmed.slice(6));
             const content = data.choices?.[0]?.delta?.content;
             if (content) {
-              yield content;
+              yield { type: 'text', content };
             }
           } catch {
             // Skip invalid JSON lines
