@@ -1,6 +1,5 @@
-import { existsSync, unlinkSync, renameSync, chmodSync } from 'fs';
+import { existsSync, unlinkSync, renameSync, chmodSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
-import { spawn } from 'child_process';
 
 const GITHUB_REPO = 'Foundation42/ai';
 const GITHUB_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
@@ -280,16 +279,41 @@ export async function performUpgrade(
     if (restart) {
       console.log('Restarting...');
 
-      // Spawn the new process and exit
-      const args = process.argv.slice(1);
-      const child = spawn(currentPath, args, {
-        detached: true,
-        stdio: 'inherit',
+      // Create a restart script that waits for this process to exit, then starts the new one
+      const pid = process.pid;
+      const args = process.argv.slice(1).map(a => `"${a}"`).join(' ');
+      const restartScript = `/tmp/ai-restart-${pid}.sh`;
+      const logFile = '/tmp/ai-restart.log';
+
+      // Script waits for old process to exit, then starts new binary with same args
+      const script = `#!/bin/bash
+# Clean up this script
+rm -f "${restartScript}"
+
+# Wait for old process to exit (max 30 seconds)
+for i in {1..30}; do
+  if ! kill -0 ${pid} 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+
+# Small delay to ensure port is released
+sleep 1
+
+# Start new process
+exec ${currentPath} ${args}
+`;
+
+      writeFileSync(restartScript, script, { mode: 0o755 });
+
+      // Spawn the restart script detached
+      const child = Bun.spawn(['bash', restartScript], {
+        stdin: 'ignore',
+        stdout: 'ignore',
+        stderr: 'ignore',
       });
       child.unref();
-
-      // Give the new process a moment to start
-      await new Promise(resolve => setTimeout(resolve, 500));
 
       return {
         success: true,
