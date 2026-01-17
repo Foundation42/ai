@@ -1,20 +1,31 @@
 # AI CLI
 
-**A reasoning engine for DevOps.**
+**An AI that can actually do things.**
 
-Talk to your servers like you talk to a colleague. Ask questions in plain English, get answers from anywhere in your infrastructure.
+Talk to your computer in plain English. Ask questions, run commands, manage files, explore codebases—locally or across your entire infrastructure.
 
 ```bash
-ai "which server has the highest CPU load right now?"
-ai "check for security vulnerabilities on all web servers"
-ai "install nginx on @web1, configure it for myapp, and verify it's running"
+# On your local machine
+ai "what's eating up my disk space?"
+ai "find all the large video files I haven't watched"
+ai "why is my system running slow?"
+
+# In your codebase
+ai "explain how the auth system works in this project"
+ai "find and fix the bug in src/parser.ts"
+ai "review this PR for security issues" < diff.patch
+
+# Across your infrastructure (home lab, servers, cloud)
+ai "@raspberry-pi what's the CPU temperature?"
+ai "check disk space on all my servers"
+ai "deploy the latest version to @production"
 ```
 
 ## What It Is
 
-AI CLI is a command-line tool that connects large language models (LLMs) to your infrastructure. It's not just a chatbot—it can **execute commands**, **read and edit files**, **query remote servers**, and **manage entire fleets** of machines.
+AI CLI is a command-line tool that connects large language models (LLMs) to your system. It's not just a chatbot—it can **execute commands**, **read and edit files**, **explore codebases**, and optionally **manage remote machines**.
 
-Think of it as giving every server in your infrastructure the ability to understand and respond to natural language.
+Use it on your laptop to get things done faster. Deploy it to your Raspberry Pi, home server, or cloud infrastructure to build a network of AI-powered nodes you can query from anywhere.
 
 ## What It Does
 
@@ -28,18 +39,36 @@ Think of it as giving every server in your infrastructure the ability to underst
 
 ## Why You Need It
 
-**The Problem:** DevOps is drowning in complexity. Dozens of servers, hundreds of config files, thousands of logs. You spend more time *finding* information than *acting* on it.
+**The Problem:** You know what you want to do, but not always the exact command. Finding files, parsing logs, remembering flags, writing one-off scripts—it all takes time.
 
-**The Solution:** Ask questions in plain English. The AI figures out which commands to run, which files to read, which servers to query—and does it for you.
+**The Solution:** Just describe what you want. The AI figures out how to do it.
 
 ```bash
-# Instead of: ssh web1 "df -h" && ssh web2 "df -h" && ssh db1 "df -h" | grep ...
+# Instead of: find . -name "*.ts" -exec grep -l "TODO" {} \; | xargs wc -l | ...
+ai "find all TODO comments in this project and count them by file"
+
+# Instead of: du -ah ~ | sort -rh | head -20 | ...
+ai "what's taking up space in my home directory?"
+
+# Instead of: reading man pages and Stack Overflow
+ai "compress all PNGs in this folder to reduce file size"
+
+# Instead of: writing a bash script
+ai "rename all these files to lowercase with dashes instead of spaces"
+```
+
+**Scales from laptop to data center:**
+
+```bash
+# Just your machine
+ai "why is my fan running so loud?"
+
+# Your home network
+ai "@nas how much storage is left?"
+ai "@pi check if the garage door sensor is working"
+
+# Production infrastructure
 ai "which servers are running low on disk space?"
-
-# Instead of: grep -r "ERROR" /var/log/*.log | awk ... | sort | uniq -c | ...
-ai "summarize the errors in today's logs and suggest fixes"
-
-# Instead of: writing a bash script to check 10 servers
 ai "verify nginx is running on all web servers, restart any that are down"
 ```
 
