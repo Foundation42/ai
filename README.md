@@ -228,6 +228,24 @@ ai -m openai:gpt-4o "Explain quantum computing"
 ai -s "You are a pirate" "Hello there!"
 ```
 
+### Tool Output Verbosity
+
+Control how much detail you see when the AI uses tools:
+
+```bash
+# Normal mode (default) - shows tool names as they execute
+ai "what's in this directory?"
+
+# Verbose mode - shows full tool output (useful for debugging)
+ai -v "check disk space"
+
+# Quiet mode - hides tool calls entirely, shows only final response
+ai -q "summarize the system status"
+
+# Auto-confirm mode - skip confirmation prompts for dangerous commands
+ai -y "restart the nginx service"
+```
+
 ### Pipe Mode
 
 ```bash
@@ -1014,6 +1032,32 @@ systemctl start ai
 
 The AI automatically detects when running under systemd and exits cleanly after upgrades, letting systemd handle the restart.
 
+## Contributing
+
+Contributions are welcome! Here's how to get started:
+
+```bash
+# Clone the repo
+git clone https://github.com/Foundation42/ai.git
+cd ai
+
+# Install dependencies (requires Bun)
+bun install
+
+# Run in development mode
+bun run dev "hello world"
+
+# Build the binary
+bun run build
+```
+
+**Guidelines:**
+
+- Open an issue first for major changes
+- Follow the existing code style
+- Test your changes locally before submitting
+- Update documentation if adding new features
+
 ## License
 
 MIT
@@ -1021,8 +1065,8 @@ MIT
 ---
 
 <p align="center">
-  <em>Lovingly crafted by</em><br>
-  <strong>Christian Beaumont</strong> (<a href="https://entrained.ai">Entrained AI Institute</a>)<br>
-  <strong>Claude Code</strong> (<a href="https://anthropic.com">Anthropic</a>)<br>
-  <strong>Gemini</strong> (<a href="https://google.com">Google</a>)
+  <em>Built with</em><br>
+  <a href="https://entrained.ai"><strong>Christian Beaumont</strong></a> ·
+  <a href="https://anthropic.com"><strong>Claude</strong></a> ·
+  <a href="https://google.com"><strong>Gemini</strong></a>
 </p>
