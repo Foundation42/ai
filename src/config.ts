@@ -66,9 +66,17 @@ export interface ScheduledTask {
   };
 }
 
+export interface KnowledgeSyncConfig {
+  enabled?: boolean;         // Enable automatic knowledge sync (default: false)
+  interval?: number;         // Sync interval in ms (default: 300000 = 5 minutes)
+  categories?: Array<'learning' | 'solution' | 'observation' | 'note'>;  // Categories to sync (default: all)
+  peers?: string[];          // Specific peers to sync with (default: all)
+}
+
 export interface SchedulerConfig {
   enabled?: boolean;         // Master switch (default: false)
   tasks?: ScheduledTask[];   // List of scheduled tasks
+  knowledgeSync?: KnowledgeSyncConfig;  // Automatic knowledge sync config
 }
 
 export interface ServerConfig {
@@ -281,6 +289,14 @@ export function getAutoUpgradeConfig(): AutoUpgradeConfig {
 export function getSchedulerConfig(): SchedulerConfig {
   const config = loadConfig();
   return config.server?.scheduler || { enabled: false, tasks: [] };
+}
+
+/**
+ * Get knowledge sync configuration
+ */
+export function getKnowledgeSyncConfig(): KnowledgeSyncConfig {
+  const config = loadConfig();
+  return config.server?.scheduler?.knowledgeSync || { enabled: false };
 }
 
 /**

@@ -2,7 +2,7 @@ import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
 import { getDefaultSystemPrompt, loadCertFile, getServerAutoConfirm, getAutoUpgradeConfig, type ServerTLSConfig } from './config';
 import { checkForUpgrade, performUpgrade, loadUpgradeState, saveUpgradeState } from './upgrade';
-import { startScheduler, stopScheduler, getSchedulerStatus } from './scheduler';
+import { startScheduler, stopScheduler, getSchedulerStatus, startKnowledgeSync } from './scheduler';
 import pc from 'picocolors';
 
 // Version is injected at build time via --define
@@ -289,6 +289,9 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
   // Start scheduler if enabled
   startScheduler();
+
+  // Start knowledge sync if enabled (also started by scheduler, but this catches the case where scheduler is disabled)
+  startKnowledgeSync();
 }
 
 async function handleChatCompletions(req: Request): Promise<Response> {

@@ -1344,6 +1344,47 @@ Memories are stored locally in `~/.config/ai/memory.json`:
 }
 ```
 
+### Scheduled Knowledge Sync
+
+Enable automatic periodic sync of memories between nodes:
+
+```json
+{
+  "server": {
+    "scheduler": {
+      "enabled": true,
+      "knowledgeSync": {
+        "enabled": true,
+        "interval": 300000,
+        "categories": ["learning", "solution"]
+      }
+    }
+  }
+}
+```
+
+Configuration options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Enable automatic sync |
+| `interval` | `300000` | Sync interval in ms (default: 5 minutes) |
+| `categories` | all | Only sync specific categories |
+| `peers` | all | Only sync with specific peers |
+
+When enabled, nodes will automatically:
+1. Send new memories to peers since last sync
+2. Receive new memories from peers
+3. Avoid duplicates via memory ID tracking
+4. Track sync state in `~/.config/ai/memory-sync.json`
+
+Example logs:
+```
+[Knowledge Sync] Syncing with 2 peer(s)...
+   node1: Sent 3, received 2
+   node2: Sent 3, received 0
+```
+
 ## systemd Integration
 
 For production deployments, run fleet nodes as systemd services:

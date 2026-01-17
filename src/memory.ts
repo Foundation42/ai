@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { ensureConfigDir } from './config';
 
 const MEMORY_PATH = join(homedir(), '.config', 'ai', 'memory.json');
+const SYNC_STATE_PATH = join(homedir(), '.config', 'ai', 'memory-sync.json');
 
 export interface Memory {
   id: string;               // Unique identifier
@@ -278,4 +279,135 @@ export function formatMemories(memories: Memory[]): string {
   }
 
   return lines.join('\n');
+}
+
+// ============================================
+// Knowledge Sync
+// ============================================
+
+export interface SyncState {
+  peers: Record<string, {
+    lastSyncTime: number;      // When we last synced with this peer
+    lastSentId?: string;       // Last memory ID we sent
+    lastReceivedId?: string;   // Last memory ID we received
+    syncCount: number;         // Total syncs with this peer
+  }>;
+}
+
+/**
+ * Load sync state from disk
+ */
+export function loadSyncState(): SyncState {
+  try {
+    if (existsSync(SYNC_STATE_PATH)) {
+      return JSON.parse(readFileSync(SYNC_STATE_PATH, 'utf-8'));
+    }
+  } catch {}
+  return { peers: {} };
+}
+
+/**
+ * Save sync state to disk
+ */
+export function saveSyncState(state: SyncState): void {
+  ensureConfigDir();
+  writeFileSync(SYNC_STATE_PATH, JSON.stringify(state, null, 2));
+}
+
+/**
+ * Get memories created/updated since a timestamp
+ */
+export function getMemoriesSince(timestamp: number): Memory[] {
+  const store = loadMemoryStore();
+  return store.memories.filter(m => {
+    const effectiveTime = m.updated || m.created;
+    return effectiveTime > timestamp && m.source === 'local';
+  });
+}
+
+/**
+ * Merge received memories, avoiding duplicates
+ */
+export function mergeReceivedMemories(peerName: string, memories: Memory[]): number {
+  const store = loadMemoryStore();
+
+  // Initialize shared array for peer if needed
+  if (!store.shared[peerName]) {
+    store.shared[peerName] = [];
+  }
+
+  const existingIds = new Set(store.shared[peerName].map(m => m.id));
+  let addedCount = 0;
+
+  for (const memory of memories) {
+    if (!existingIds.has(memory.id)) {
+      store.shared[peerName].push({
+        ...memory,
+        source: peerName,
+      });
+      addedCount++;
+    }
+  }
+
+  if (addedCount > 0) {
+    saveMemoryStore(store);
+  }
+
+  return addedCount;
+}
+
+/**
+ * Update sync state after a successful sync
+ */
+export function updateSyncState(peerName: string, sentMemories: Memory[], receivedMemories: Memory[]): void {
+  const state = loadSyncState();
+
+  if (!state.peers[peerName]) {
+    state.peers[peerName] = {
+      lastSyncTime: 0,
+      syncCount: 0,
+    };
+  }
+
+  const peer = state.peers[peerName];
+  peer.lastSyncTime = Date.now();
+  peer.syncCount++;
+
+  if (sentMemories.length > 0) {
+    peer.lastSentId = sentMemories[sentMemories.length - 1]!.id;
+  }
+
+  if (receivedMemories.length > 0) {
+    peer.lastReceivedId = receivedMemories[receivedMemories.length - 1]!.id;
+  }
+
+  saveSyncState(state);
+}
+
+/**
+ * Get last sync time for a peer
+ */
+export function getLastSyncTime(peerName: string): number {
+  const state = loadSyncState();
+  return state.peers[peerName]?.lastSyncTime || 0;
+}
+
+/**
+ * Get sync statistics
+ */
+export function getSyncStats(): { peers: Record<string, { lastSync: string; syncCount: number; memoriesShared: number }> } {
+  const state = loadSyncState();
+  const store = loadMemoryStore();
+
+  const stats: Record<string, { lastSync: string; syncCount: number; memoriesShared: number }> = {};
+
+  for (const [peerName, peerState] of Object.entries(state.peers)) {
+    stats[peerName] = {
+      lastSync: peerState.lastSyncTime ? new Date(peerState.lastSyncTime).toISOString() : 'never',
+      syncCount: peerState.syncCount,
+      memoriesShared: store.shared[peerName]?.length || 0,
+    };
+  }
+
+  return { peers: stats };
 }

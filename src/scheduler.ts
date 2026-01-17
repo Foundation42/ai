@@ -2,19 +2,28 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import pc from 'picocolors';
-import { getSchedulerConfig, ensureConfigDir, type ScheduledTask, getFleetConfig } from './config';
+import { getSchedulerConfig, getKnowledgeSyncConfig, ensureConfigDir, type ScheduledTask, type KnowledgeSyncConfig } from './config';
 import { loadFleetConfig, queryFleetNode, type FleetNode } from './fleet';
 import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
 import { getDefaultSystemPrompt, getServerAutoConfirm, getFleetTLSConfig } from './config';
+import {
+  getMemoriesSince,
+  getLastSyncTime,
+  mergeReceivedMemories,
+  updateSyncState,
+  getSyncStats,
+  type Memory,
+} from './memory';
 
 const STATE_PATH = join(homedir(), '.config', 'ai', 'scheduler-state.json');
 
 // Confirmation function for tool execution - respects server autoConfirm setting
 const serverConfirmFn = async () => getServerAutoConfirm();
 
-// Timer reference for cleanup
+// Timer references for cleanup
 let schedulerTimer: Timer | null = null;
+let knowledgeSyncTimer: Timer | null = null;
 
 // Tool system prompt for scheduled tasks
 const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the system.
@@ -396,6 +405,9 @@ export function startScheduler(): void {
 
   // Then check every 30 seconds for due tasks
   schedulerTimer = setInterval(schedulerTick, 30000);
+
+  // Also start knowledge sync if enabled
+  startKnowledgeSync();
 }
 
 /**
@@ -406,6 +418,139 @@ export function stopScheduler(): void {
     clearInterval(schedulerTimer);
     schedulerTimer = null;
   }
+  if (knowledgeSyncTimer) {
+    clearInterval(knowledgeSyncTimer);
+    knowledgeSyncTimer = null;
+  }
+}
+
+// ============================================
+// Knowledge Sync
+// ============================================
+
+/**
+ * Sync memories with a single peer
+ */
+async function syncWithPeer(
+  peer: FleetNode,
+  config: KnowledgeSyncConfig
+): Promise<{ sent: number; received: number; error?: string }> {
+  const fleetTLS = getFleetTLSConfig();
+  const lastSync = getLastSyncTime(peer.name);
+
+  // Get memories to send (created since last sync)
+  let memoriesToSend = getMemoriesSince(lastSync);
+
+  // Filter by categories if specified
+  if (config.categories && config.categories.length > 0) {
+    memoriesToSend = memoriesToSend.filter(m => config.categories!.includes(m.category));
+  }
+
+  try {
+    // Send our memories and request theirs
+    const prompt = `KNOWLEDGE_SYNC_REQUEST: A peer wants to sync knowledge with you.
+
+1. Here are ${memoriesToSend.length} memories from me since ${lastSync ? new Date(lastSync).toISOString() : 'the beginning'}:
+${JSON.stringify(memoriesToSend)}
+
+2. Please:
+   a) Store these memories using memory_receive with peer="${peer.name}"
+   b) Send back your memories created since timestamp ${lastSync} as JSON
+   c) Format your response as: MEMORIES_RESPONSE: [array of your memories]`;
+
+    const result = await queryFleetNode(peer, prompt, { fleetTLS });
+
+    if (!result.success) {
+      return { sent: 0, received: 0, error: result.error };
+    }
+
+    // Parse received memories from response
+    let receivedMemories: Memory[] = [];
+    const response = result.response || '';
+
+    // Try to extract memories from response
+    const memoriesMatch = response.match(/MEMORIES_RESPONSE:\s*(\[[\s\S]*?\])/);
+    if (memoriesMatch) {
+      try {
+        receivedMemories = JSON.parse(memoriesMatch[1]!);
+      } catch {
+        // Couldn't parse, that's ok
+      }
+    }
+
+    // Merge received memories
+    const addedCount = receivedMemories.length > 0
+      ? mergeReceivedMemories(peer.name, receivedMemories)
+      : 0;
+
+    // Update sync state
+    updateSyncState(peer.name, memoriesToSend, receivedMemories);
+
+    return { sent: memoriesToSend.length, received: addedCount };
+  } catch (err) {
+    return { sent: 0, received: 0, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Run knowledge sync with all configured peers
+ */
+async function knowledgeSyncTick(): Promise<void> {
+  const config = getKnowledgeSyncConfig();
+
+  if (!config.enabled) {
+    return;
+  }
+
+  const fleetConfig = loadFleetConfig();
+  let peers = fleetConfig.nodes;
+
+  // Filter to specific peers if configured
+  if (config.peers && config.peers.length > 0) {
+    peers = peers.filter(n => config.peers!.includes(n.name));
+  }
+
+  if (peers.length === 0) {
+    return;
+  }
+
+  console.log(pc.cyan(`\n[Knowledge Sync] Syncing with ${peers.length} peer(s)...`));
+
+  for (const peer of peers) {
+    const result = await syncWithPeer(peer, config);
+
+    if (result.error) {
+      console.log(pc.dim(`   ${peer.name}: Error - ${result.error}`));
+    } else {
+      console.log(pc.dim(`   ${peer.name}: Sent ${result.sent}, received ${result.received}`));
+    }
+  }
+}
+
+/**
+ * Start knowledge sync
+ */
+export function startKnowledgeSync(): void {
+  // Prevent double-start
+  if (knowledgeSyncTimer) {
+    return;
+  }
+
+  const config = getKnowledgeSyncConfig();
+
+  if (!config.enabled) {
+    return;
+  }
+
+  const interval = config.interval || 300000; // Default 5 minutes
+
+  console.log(pc.dim(`   Knowledge sync enabled (every ${interval / 1000}s)`));
+
+  // Run initial sync after 15s delay
+  setTimeout(knowledgeSyncTick, 15000);
+
+  // Then sync at configured interval
+  knowledgeSyncTimer = setInterval(knowledgeSyncTick, interval);
 }
 
 /**
