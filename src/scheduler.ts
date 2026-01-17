@@ -17,6 +17,7 @@ import {
 } from './memory';
 
 const STATE_PATH = join(homedir(), '.config', 'ai', 'scheduler-state.json');
+const HANDOFF_STATE_PATH = join(homedir(), '.config', 'ai', 'handoff-state.json');
 
 // Confirmation function for tool execution - respects server autoConfirm setting
 const serverConfirmFn = async () => getServerAutoConfirm();
@@ -24,6 +25,96 @@ const serverConfirmFn = async () => getServerAutoConfirm();
 // Timer references for cleanup
 let schedulerTimer: Timer | null = null;
 let knowledgeSyncTimer: Timer | null = null;
+
+// ============================================
+// Round-Robin Handoff State
+// ============================================
+
+interface HandoffState {
+  lastPeerIndex: number;           // Index of last peer used
+  peerStats: Record<string, {      // Per-peer statistics
+    handoffs: number;              // Total handoffs to this peer
+    successes: number;             // Successful handoffs
+    failures: number;              // Failed handoffs
+    lastUsed?: number;             // Timestamp of last use
+    lastSuccess?: number;          // Timestamp of last success
+    consecutiveFailures: number;   // For health tracking
+  }>;
+}
+
+function loadHandoffState(): HandoffState {
+  try {
+    if (existsSync(HANDOFF_STATE_PATH)) {
+      return JSON.parse(readFileSync(HANDOFF_STATE_PATH, 'utf-8'));
+    }
+  } catch {}
+  return { lastPeerIndex: -1, peerStats: {} };
+}
+
+function saveHandoffState(state: HandoffState): void {
+  ensureConfigDir();
+  writeFileSync(HANDOFF_STATE_PATH, JSON.stringify(state, null, 2));
+}
+
+/**
+ * Select next peer using round-robin, skipping unhealthy peers
+ */
+function selectNextPeer(peers: FleetNode[], state: HandoffState): { peer: FleetNode; index: number } | null {
+  if (peers.length === 0) return null;
+
+  const maxConsecutiveFailures = 3; // Skip peers with this many consecutive failures
+  let attempts = 0;
+  let index = (state.lastPeerIndex + 1) % peers.length;
+
+  while (attempts < peers.length) {
+    const peer = peers[index]!;
+    const peerStat = state.peerStats[peer.name];
+
+    // Skip if peer has too many consecutive failures (but still try if all peers are failing)
+    if (!peerStat || peerStat.consecutiveFailures < maxConsecutiveFailures) {
+      return { peer, index };
+    }
+
+    // Check if enough time has passed to retry a failing peer (5 minutes)
+    if (peerStat.lastUsed && Date.now() - peerStat.lastUsed > 5 * 60 * 1000) {
+      return { peer, index };
+    }
+
+    index = (index + 1) % peers.length;
+    attempts++;
+  }
+
+  // All peers are failing, just return the next one anyway
+  index = (state.lastPeerIndex + 1) % peers.length;
+  return { peer: peers[index]!, index };
+}
+
+/**
+ * Update peer stats after a handoff attempt
+ */
+function updatePeerStats(state: HandoffState, peerName: string, success: boolean): void {
+  if (!state.peerStats[peerName]) {
+    state.peerStats[peerName] = {
+      handoffs: 0,
+      successes: 0,
+      failures: 0,
+      consecutiveFailures: 0,
+    };
+  }
+
+  const stats = state.peerStats[peerName]!;
+  stats.handoffs++;
+  stats.lastUsed = Date.now();
+
+  if (success) {
+    stats.successes++;
+    stats.consecutiveFailures = 0;
+    stats.lastSuccess = Date.now();
+  } else {
+    stats.failures++;
+    stats.consecutiveFailures++;
+  }
+}
 
 // Tool system prompt for scheduled tasks
 const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the system.
@@ -233,7 +324,7 @@ async function executePromptLocally(prompt: string): Promise<{ success: boolean;
 }
 
 /**
- * Hand off task to a peer node
+ * Hand off task to a peer node using round-robin selection
  */
 async function handoffToPeer(
   task: ScheduledTask,
@@ -244,19 +335,38 @@ async function handoffToPeer(
   }
 
   const fleetTLS = getFleetTLSConfig();
+  const handoffState = loadHandoffState();
 
-  // Try peers in order until one succeeds
-  for (const peer of peers) {
+  // Try up to peers.length times, using round-robin
+  let attempts = 0;
+  const maxAttempts = peers.length;
+
+  while (attempts < maxAttempts) {
+    // Select next peer using round-robin
+    const selection = selectNextPeer(peers, handoffState);
+    if (!selection) {
+      return { success: false, error: 'No peers available' };
+    }
+
+    const { peer, index } = selection;
+    handoffState.lastPeerIndex = index;
+
     const prompt = task.handoff?.prompt || task.prompt;
-    console.log(pc.dim(`   Handing off to ${peer.name}...`));
+    console.log(pc.dim(`   Handing off to ${peer.name} (round-robin #${index + 1}/${peers.length})...`));
 
     const result = await queryFleetNode(peer, prompt, { fleetTLS });
 
     if (result.success) {
+      updatePeerStats(handoffState, peer.name, true);
+      saveHandoffState(handoffState);
       return { success: true, node: peer.name, response: result.response };
     }
 
     console.log(pc.dim(`   ${peer.name} failed: ${result.error}`));
+    updatePeerStats(handoffState, peer.name, false);
+    saveHandoffState(handoffState);
+
+    attempts++;
   }
 
   return { success: false, error: 'All peers failed' };
@@ -554,9 +664,51 @@ export function startKnowledgeSync(): void {
 }
 
 /**
+ * Get handoff stats for API
+ */
+export function getHandoffStats(): {
+  lastPeerIndex: number;
+  peers: Array<{
+    name: string;
+    handoffs: number;
+    successes: number;
+    failures: number;
+    successRate: number;
+    consecutiveFailures: number;
+    healthy: boolean;
+    lastUsed?: string;
+    lastSuccess?: string;
+  }>;
+} {
+  const state = loadHandoffState();
+
+  const peers = Object.entries(state.peerStats).map(([name, stats]) => ({
+    name,
+    handoffs: stats.handoffs,
+    successes: stats.successes,
+    failures: stats.failures,
+    successRate: stats.handoffs > 0 ? Math.round((stats.successes / stats.handoffs) * 100) : 0,
+    consecutiveFailures: stats.consecutiveFailures,
+    healthy: stats.consecutiveFailures < 3,
+    lastUsed: stats.lastUsed ? new Date(stats.lastUsed).toISOString() : undefined,
+    lastSuccess: stats.lastSuccess ? new Date(stats.lastSuccess).toISOString() : undefined,
+  }));
+
+  return {
+    lastPeerIndex: state.lastPeerIndex,
+    peers,
+  };
+}
+
+/**
  * Get scheduler status for API
  */
-export function getSchedulerStatus(): { enabled: boolean; tasks: Array<{ name: string; state: TaskState; schedule: string; nextRun?: number }> } {
+export function getSchedulerStatus(): {
+  enabled: boolean;
+  tasks: Array<{ name: string; state: TaskState; schedule: string; nextRun?: number }>;
+  handoff: ReturnType<typeof getHandoffStats>;
+  knowledgeSync: ReturnType<typeof getSyncStats>;
+} {
   const config = getSchedulerConfig();
   const state = loadSchedulerState();
   const now = Date.now();
@@ -575,5 +727,10 @@ export function getSchedulerStatus(): { enabled: boolean; tasks: Array<{ name: s
     };
   });
 
-  return { enabled: config.enabled || false, tasks };
+  return {
+    enabled: config.enabled || false,
+    tasks,
+    handoff: getHandoffStats(),
+    knowledgeSync: getSyncStats(),
+  };
 }
