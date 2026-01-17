@@ -120,16 +120,31 @@ Create `~/.config/ai/config.json` (or run `ai --config-init` to generate a templ
     "deepseek": { "apiKey": "your-deepseek-api-key" },
     "ollama": { "baseUrl": "http://localhost:11434" }
   },
+  "server": {
+    "port": 9443,
+    "token": "your-server-token",
+    "autoConfirm": true,
+    "tls": {
+      "cert": "~/.config/ai/certs/server.pem",
+      "key": "~/.config/ai/certs/server-key.pem",
+      "ca": "~/.config/ai/certs/ca.pem"
+    }
+  },
   "fleet": {
     "token": "your-fleet-token",
+    "tls": {
+      "ca": "~/.config/ai/certs/ca.pem",
+      "clientCert": "~/.config/ai/certs/client.pem",
+      "clientKey": "~/.config/ai/certs/client-key.pem"
+    },
     "nodes": {
       "server1": {
-        "url": "http://10.0.1.10:9090",
+        "url": "https://10.0.1.10:9443",
         "description": "Web server",
         "systemPrompt": "You are a web server administrator focused on nginx and application health."
       },
       "server2": {
-        "url": "http://10.0.1.11:9090",
+        "url": "https://10.0.1.11:9443",
         "description": "Database server",
         "systemPrompt": "You are a PostgreSQL database administrator. Focus on query performance and data integrity."
       }
@@ -143,6 +158,18 @@ Create `~/.config/ai/config.json` (or run `ai --config-init` to generate a templ
   }
 }
 ```
+
+### Configuration Options
+
+| Section | Option | Description |
+|---------|--------|-------------|
+| `server.autoConfirm` | boolean | Auto-confirm dangerous commands (systemctl, sudo, etc.) |
+| `server.tls.cert` | path | Server certificate for HTTPS |
+| `server.tls.key` | path | Server private key |
+| `server.tls.ca` | path | CA certificate for client verification (enables mTLS) |
+| `fleet.tls.ca` | path | CA certificate for verifying server certs |
+| `fleet.tls.clientCert` | path | Client certificate for mTLS authentication |
+| `fleet.tls.clientKey` | path | Client private key for mTLS |
 
 ## CLI Options
 
@@ -163,6 +190,9 @@ Server Mode:
   --server                      Start as HTTP server
   -p, --port <port>             Server port (default: 8080)
   --token <token>               Bearer token for authentication
+  --cert <path>                 Server certificate file (enables HTTPS)
+  --key <path>                  Server private key file
+  --ca <path>                   CA certificate for client verification (enables mTLS)
 
 Configuration:
   --config-init                 Create template config file
@@ -191,6 +221,7 @@ When using a provider with tool support (all providers), the AI can:
 | `read_file` | Read file contents |
 | `list_files` | List directory contents |
 | `edit_file` | Make targeted string replacements |
+| `version` | Get version and system info |
 
 Dangerous commands require confirmation unless `-y` is used.
 
@@ -201,7 +232,8 @@ src/
 ├── index.ts          # Main entry, mode detection, REPL
 ├── config.ts         # CLI parsing, JSON config loading
 ├── fleet.ts          # Fleet orchestration, @ mentions
-├── server.ts         # HTTP server mode
+├── server.ts         # HTTP server mode (with TLS/mTLS)
+├── upgrade.ts        # Auto-upgrade from GitHub releases
 ├── history.ts        # JSONL history logging
 ├── providers/
 │   ├── index.ts      # Provider factory, auto-detection
@@ -219,7 +251,8 @@ src/
 │   ├── read_file.ts  # File reading
 │   ├── list_files.ts # Directory listing
 │   ├── edit_file.ts  # File editing
-│   └── fleet.ts      # Fleet query tools
+│   ├── fleet.ts      # Fleet query/upgrade tools
+│   └── version.ts    # Version and system info
 └── utils/
     ├── stream.ts     # Streaming, thinking filter
     └── markdown.ts   # Terminal markdown rendering
@@ -248,6 +281,7 @@ ai "Which server has the highest load?"
 | `fleet_list` | List all fleet nodes and health status |
 | `fleet_query` | Query a specific node |
 | `fleet_broadcast` | Send prompt to all nodes |
+| `fleet_upgrade` | Check for and perform upgrades on fleet nodes |
 
 ## Server Mode
 
@@ -269,6 +303,8 @@ ai --server --port 8080 --token mysecret
 | `/v1/models` | GET | List available models |
 | `/v1/fleet/execute` | POST | Execute prompt with tools |
 | `/v1/fleet/health` | GET | Node health info (no auth) |
+| `/v1/fleet/upgrade` | GET | Check for available upgrades |
+| `/v1/fleet/upgrade` | POST | Perform upgrade and restart |
 
 ### Examples
 
@@ -288,6 +324,99 @@ curl -X POST http://localhost:8080/v1/fleet/execute \
 # Health check (no auth required)
 curl http://localhost:8080/v1/fleet/health
 ```
+
+## mTLS (Mutual TLS)
+
+Secure fleet communication with mutual TLS authentication. Both the server and client verify each other's certificates.
+
+### Generate Certificates
+
+```bash
+# Create CA
+openssl genrsa -out ca-key.pem 4096
+openssl req -new -x509 -key ca-key.pem -out ca.pem -days 365 -subj "/CN=AI-Fleet-CA"
+
+# Create server cert (for each node)
+openssl genrsa -out server-key.pem 2048
+openssl req -new -key server-key.pem -out server.csr -subj "/CN=server1"
+echo "subjectAltName=IP:10.0.1.10,DNS:server1" > server-ext.cnf
+openssl x509 -req -in server.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
+  -out server.pem -days 365 -extfile server-ext.cnf
+
+# Create client cert (for the controller)
+openssl genrsa -out client-key.pem 2048
+openssl req -new -key client-key.pem -out client.csr -subj "/CN=ai-controller"
+openssl x509 -req -in client.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
+  -out client.pem -days 365
+```
+
+### Start Server with mTLS
+
+```bash
+ai --server --port 9443 --cert server.pem --key server-key.pem --ca ca.pem
+```
+
+### Test Connection
+
+```bash
+# With client cert (works)
+curl --cert client.pem --key client-key.pem --cacert ca.pem \
+  https://10.0.1.10:9443/v1/fleet/health
+
+# Without client cert (rejected)
+curl --cacert ca.pem https://10.0.1.10:9443/v1/fleet/health
+```
+
+## Auto-Upgrade
+
+Fleet nodes can upgrade themselves from GitHub releases:
+
+```bash
+# Check for upgrades
+ai "check for upgrades on all fleet nodes"
+
+# Perform upgrade
+ai "upgrade all fleet nodes"
+
+# Or use the tool directly
+ai "@server1 upgrade yourself"
+```
+
+When a node upgrades:
+1. Downloads the new binary from GitHub releases
+2. Verifies the SHA256 checksum
+3. Replaces the current binary
+4. Restarts automatically (via systemd or restart script)
+
+## systemd Integration
+
+For production deployments, run fleet nodes as systemd services:
+
+```bash
+# Create service file
+cat > /etc/systemd/system/ai.service << EOF
+[Unit]
+Description=AI Fleet Node
+After=network.target
+
+[Service]
+Type=simple
+Environment=AI_SERVER_TOKEN=your-token
+ExecStart=/usr/local/bin/ai --server --port 9443
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start
+systemctl daemon-reload
+systemctl enable ai
+systemctl start ai
+```
+
+The AI automatically detects when running under systemd and exits cleanly after upgrades, letting systemd handle the restart.
 
 ## License
 
