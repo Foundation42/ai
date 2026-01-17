@@ -10,6 +10,7 @@ import { appendHistory } from './history';
 import { getToolDefinitions, executeTool, registerTools, type ToolCall } from './tools';
 import { readline } from './utils/readline';
 import { initializeMCPTools, cleanupMCP } from './mcp';
+import { needsOnboarding, runOnboarding } from './onboarding';
 
 // Version is injected at build time via --define, falls back to package.json
 declare const __VERSION__: string;
@@ -598,6 +599,15 @@ async function main(): Promise<void> {
   if (args.configInit) {
     createTemplateConfig();
     process.exit(0);
+  }
+
+  // First-run onboarding
+  if (needsOnboarding() && process.stdin.isTTY) {
+    const success = await runOnboarding();
+    if (!success) {
+      process.exit(0);
+    }
+    // Continue with the prompt if user completed onboarding
   }
 
   // Server mode

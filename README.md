@@ -174,15 +174,26 @@ ai "check the health of all production servers"
 
 ## Installation
 
+**Quick install (Linux):**
+
 ```bash
-# Clone and build
+curl -fsSL https://raw.githubusercontent.com/Foundation42/ai/main/install.sh | bash
+```
+
+Then just run `ai` — it will guide you through setup on first run!
+
+**Manual install:**
+
+```bash
+# Download binary
+curl -sL https://github.com/Foundation42/ai/releases/latest/download/ai-linux-x64 \
+  -o ~/.local/bin/ai && chmod +x ~/.local/bin/ai
+
+# Or build from source
 git clone https://github.com/Foundation42/ai.git
 cd ai
 bun install
 bun run build
-
-# Add to PATH
-ln -s $(pwd)/ai ~/.bun/bin/ai
 ```
 
 ## Usage
