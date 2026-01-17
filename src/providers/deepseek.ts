@@ -9,6 +9,9 @@ export class DeepSeekProvider implements Provider {
 
   constructor(config: ProviderConfig = {}) {
     this.apiKey = config.apiKey || process.env.DEEPSEEK_API_KEY || '';
+    if (!this.apiKey) {
+      console.warn('DeepSeek API key not configured. Set DEEPSEEK_API_KEY environment variable.');
+    }
     this.baseUrl = config.baseUrl || 'https://api.deepseek.com';
     if (config.model) {
       this.defaultModel = config.model;
@@ -23,13 +26,11 @@ export class DeepSeekProvider implements Provider {
     const model = options.model || this.defaultModel;
 
     // Use provided messages or build from prompt
-    let messages: Message[] = options.messages || [];
-    if (!options.messages) {
-      if (options.systemPrompt) {
-        messages.push({ role: 'system', content: options.systemPrompt });
-      }
-      messages.push({ role: 'user', content: prompt });
-    }
+    let messages: Message[] = options.messages || (
+      options.systemPrompt
+        ? [{ role: 'system', content: options.systemPrompt }, { role: 'user', content: prompt }]
+        : [{ role: 'user', content: prompt }]
+    );
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -82,6 +83,8 @@ export class DeepSeekProvider implements Provider {
           }
         }
       }
+    } catch (e) {
+      console.error('Error processing stream:', e);
     } finally {
       reader.releaseLock();
     }
