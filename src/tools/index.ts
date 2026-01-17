@@ -1,5 +1,7 @@
 import type { Tool, ToolDefinition, ToolCall, ToolResult } from './types';
 import { BashTool } from './bash';
+import { ReadFileTool } from './read_file';
+import { ListFilesTool } from './list_files';
 
 export type { Tool, ToolDefinition, ToolCall, ToolResult } from './types';
 
@@ -7,6 +9,8 @@ const tools: Map<string, Tool> = new Map();
 
 // Register default tools
 tools.set('bash', new BashTool());
+tools.set('read_file', new ReadFileTool());
+tools.set('list_files', new ListFilesTool());
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);

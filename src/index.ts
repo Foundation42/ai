@@ -199,7 +199,8 @@ async function runRepl(provider: Provider, options: StreamOptions, verbosity: Ve
 
   console.log(pc.cyan(`AI REPL (${provider.name}:${options.model || provider.defaultModel})`));
   if (useTools) {
-    console.log(pc.dim('Tools enabled: bash'));
+    const toolNames = getToolDefinitions().map(t => t.name).join(', ');
+    console.log(pc.dim(`Tools enabled: ${toolNames}`));
   }
   console.log(pc.dim('Type "exit" or Ctrl+C to quit, "clear" to reset context\n'));
 
