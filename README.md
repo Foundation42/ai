@@ -609,6 +609,7 @@ When using a provider with tool support (all providers), the AI can:
 | `read_file` | Read file contents |
 | `list_files` | List directory contents |
 | `edit_file` | Make targeted string replacements |
+| `web_fetch` | Fetch content from URLs (web pages, APIs, files) |
 | `version` | Get version and system info |
 
 Dangerous commands require confirmation unless `-y` is used.
@@ -639,7 +640,8 @@ src/
 │   ├── read_file.ts   # File reading
 │   ├── list_files.ts  # Directory listing
 │   ├── edit_file.ts   # File editing
-│   ├── fleet.ts       # Fleet query/upgrade tools
+│   ├── web_fetch.ts   # URL fetching
+│   ├── fleet.ts       # Fleet query/upgrade/restart tools
 │   ├── mcp_manage.ts  # MCP add/remove/update/list
 │   └── version.ts     # Version and system info
 ├── mcp/
