@@ -2,7 +2,7 @@
 import ora from 'ora';
 import pc from 'picocolors';
 import { Glob } from 'bun';
-import { parseArgs, printHelp, createTemplateConfig, getDefaultSystemPrompt, getServerTLSConfig, getMCPServersConfig, type Verbosity, type ServerTLSConfig } from './config';
+import { parseArgs, printHelp, createTemplateConfig, getDefaultSystemPrompt, getServerConfig, getServerTLSConfig, getMCPServersConfig, type Verbosity, type ServerTLSConfig } from './config';
 import { getProvider, type StreamOptions, type Message, type Provider, type StreamChunk } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
 import { renderMarkdown } from './utils/markdown';
@@ -630,7 +630,11 @@ async function main(): Promise<void> {
       tlsConfig = getServerTLSConfig();
     }
 
-    await startServer({ port: args.port, token: args.token, tls: tlsConfig });
+    // CLI token overrides config file token
+    const serverConfig = getServerConfig();
+    const token = args.token || serverConfig?.token;
+
+    await startServer({ port: args.port, token, tls: tlsConfig });
     return;
   }
 
