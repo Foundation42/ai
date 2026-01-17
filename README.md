@@ -107,18 +107,32 @@ ai -g "/etc/nginx/sites-enabled/*" "Check for security misconfigurations" -y
 
 ## Configuration
 
-Create `~/.aiconfig`:
+Create `~/.config/ai/config.json` (or run `ai --config-init` to generate a template):
 
-```bash
-# API Keys
-GOOGLE_API_KEY=your-key
-ANTHROPIC_API_KEY=your-key
-OPENAI_API_KEY=your-key
-MISTRAL_API_KEY=your-key
-DEEPSEEK_API_KEY=your-key
-
-# Provider priority (optional)
-AI_PROVIDER_ORDER=google,anthropic,openai,mistral,deepseek,ollama
+```json
+{
+  "providers": {
+    "default": "google",
+    "google": { "apiKey": "your-google-api-key" },
+    "anthropic": { "apiKey": "your-anthropic-api-key" },
+    "openai": { "apiKey": "your-openai-api-key" },
+    "mistral": { "apiKey": "your-mistral-api-key" },
+    "deepseek": { "apiKey": "your-deepseek-api-key" },
+    "ollama": { "baseUrl": "http://localhost:11434" }
+  },
+  "fleet": {
+    "token": "your-fleet-token",
+    "nodes": {
+      "server1": { "url": "http://10.0.1.10:9090", "description": "Web server" },
+      "server2": { "url": "http://10.0.1.11:9090", "description": "Database server" }
+    }
+  },
+  "defaults": {
+    "model": "google:gemini-2.0-flash",
+    "verbosity": "normal",
+    "autoConfirm": false
+  }
+}
 ```
 
 ## CLI Options
@@ -135,6 +149,14 @@ Options:
   -g, --glob <pattern>          Expand glob and process each file
   -h, --help                    Show help message
   -V, --version                 Show version
+
+Server Mode:
+  --server                      Start as HTTP server
+  -p, --port <port>             Server port (default: 8080)
+  --token <token>               Bearer token for authentication
+
+Configuration:
+  --config-init                 Create template config file
 ```
 
 ## Providers
@@ -168,7 +190,9 @@ Dangerous commands require confirmation unless `-y` is used.
 ```
 src/
 ├── index.ts          # Main entry, mode detection, REPL
-├── config.ts         # CLI parsing, ~/.aiconfig loading
+├── config.ts         # CLI parsing, JSON config loading
+├── fleet.ts          # Fleet orchestration, @ mentions
+├── server.ts         # HTTP server mode
 ├── history.ts        # JSONL history logging
 ├── providers/
 │   ├── index.ts      # Provider factory, auto-detection
@@ -185,7 +209,8 @@ src/
 │   ├── bash.ts       # Shell execution
 │   ├── read_file.ts  # File reading
 │   ├── list_files.ts # Directory listing
-│   └── edit_file.ts  # File editing
+│   ├── edit_file.ts  # File editing
+│   └── fleet.ts      # Fleet query tools
 └── utils/
     ├── stream.ts     # Streaming, thinking filter
     └── markdown.ts   # Terminal markdown rendering
@@ -193,13 +218,9 @@ src/
 
 ## Fleet Orchestration
 
-Configure remote AI nodes and query them with @ mentions:
+Query remote AI nodes using @ mentions (configure nodes in `~/.config/ai/config.json`):
 
 ```bash
-# Configure fleet in ~/.aiconfig
-AI_FLEET_NODES=server1:http://10.0.1.10:9090,server2:http://10.0.1.11:9090
-AI_FLEET_TOKEN=your-fleet-token
-
 # Query specific nodes with @ mentions
 ai "@server1 what's your disk usage?"
 ai "@server2 check if nginx is running"
@@ -224,14 +245,11 @@ ai "Which server has the highest load?"
 Run as an OpenAI-compatible API server with fleet management capabilities:
 
 ```bash
-# Start server (generates token if not provided)
+# Start server
 ai --server
 
 # With custom port and token
 ai --server --port 8080 --token mysecret
-
-# Or use environment variable
-AI_SERVER_TOKEN=mysecret ai --server
 ```
 
 ### Endpoints
