@@ -1,6 +1,6 @@
 import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
-import { getDefaultSystemPrompt } from './config';
+import { getDefaultSystemPrompt, loadCertFile, type ServerTLSConfig } from './config';
 import { checkForUpgrade, performUpgrade } from './upgrade';
 import pc from 'picocolors';
 
@@ -15,12 +15,14 @@ Available tools:
 - read_file: Read file contents
 - list_files: List directory contents
 - edit_file: Make targeted edits to files
+- version: Get your own version and system info
 
 Use tools proactively when they would help answer the user's question. For example:
 - "What time is it?" → Use bash with "date"
 - "What's in this directory?" → Use list_files or bash with "ls"
 - "Show me the contents of config.json" → Use read_file
 - "What's my IP address?" → Use bash with "curl ifconfig.me" or similar
+- "What version are you running?" → Use version tool
 
 Always try to use your tools to get real, accurate information rather than saying you can't help.`;
 
@@ -55,6 +57,7 @@ function buildSystemPrompt(requestSystemPrompt?: string, includeTools: boolean =
 interface ServerConfig {
   port: number;
   token?: string;
+  tls?: ServerTLSConfig;
 }
 
 interface ChatCompletionRequest {
@@ -89,8 +92,28 @@ export async function startServer(config: ServerConfig): Promise<void> {
     console.log(pc.dim(`\n   Using configured token\n`));
   }
 
+  // Build TLS configuration if provided
+  let tlsConfig: Parameters<typeof Bun.serve>[0]['tls'] | undefined;
+  if (config.tls?.cert && config.tls?.key) {
+    try {
+      tlsConfig = {
+        cert: loadCertFile(config.tls.cert),
+        key: loadCertFile(config.tls.key),
+        ca: config.tls.ca ? loadCertFile(config.tls.ca) : undefined,
+        requestCert: config.tls.requestCert ?? !!config.tls.ca,
+        rejectUnauthorized: true,
+      };
+      const mTLSEnabled = !!config.tls.ca;
+      console.log(pc.cyan(`🔒 TLS enabled (mTLS: ${mTLSEnabled})`));
+    } catch (err) {
+      console.error(pc.red(`TLS configuration error: ${err instanceof Error ? err.message : err}`));
+      process.exit(1);
+    }
+  }
+
   const server = Bun.serve({
     port: config.port,
+    tls: tlsConfig,
     async fetch(req) {
       const url = new URL(req.url);
 
@@ -154,7 +177,8 @@ export async function startServer(config: ServerConfig): Promise<void> {
     },
   });
 
-  console.log(pc.green(`✓ Server listening on http://localhost:${server.port}`));
+  const protocol = tlsConfig ? 'https' : 'http';
+  console.log(pc.green(`✓ Server listening on ${protocol}://localhost:${server.port}`));
 }
 
 async function handleChatCompletions(req: Request): Promise<Response> {

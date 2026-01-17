@@ -1,16 +1,20 @@
 import pc from 'picocolors';
-import { getFleetConfig as getConfigFleet, type FleetConfig as ConfigFleetConfig } from './config';
+import { getFleetConfig as getConfigFleet, getFleetTLSConfig, loadCertFile, type FleetConfig as ConfigFleetConfig, type FleetTLSConfig } from './config';
 
 export interface FleetNode {
   name: string;
   url: string;
   token?: string;
   description?: string;
+  // Per-node TLS override
+  clientCert?: string;
+  clientKey?: string;
 }
 
 export interface FleetConfig {
   nodes: FleetNode[];
   defaultToken?: string;
+  tls?: FleetTLSConfig;
 }
 
 export interface FleetQueryResult {
@@ -26,6 +30,7 @@ export interface FleetQueryResult {
  */
 export function loadFleetConfig(): FleetConfig {
   const configFleet = getConfigFleet();
+  const fleetTLS = getFleetTLSConfig();
   const nodes: FleetNode[] = [];
 
   for (const [name, nodeConfig] of Object.entries(configFleet.nodes || {})) {
@@ -34,10 +39,12 @@ export function loadFleetConfig(): FleetConfig {
       url: nodeConfig.url.startsWith('http') ? nodeConfig.url : `http://${nodeConfig.url}`,
       token: nodeConfig.token || configFleet.token,
       description: nodeConfig.description,
+      clientCert: nodeConfig.clientCert,
+      clientKey: nodeConfig.clientKey,
     });
   }
 
-  return { nodes, defaultToken: configFleet.token };
+  return { nodes, defaultToken: configFleet.token, tls: fleetTLS };
 }
 
 /**
@@ -92,12 +99,39 @@ export function resolveMentions(mentions: string[], config: FleetConfig): FleetN
 }
 
 /**
+ * Build TLS fetch options for a fleet node
+ */
+function buildTLSFetchOptions(node: FleetNode, fleetTLS?: FleetTLSConfig): { tls?: { cert: string; key: string; ca?: string } } {
+  // Get cert paths (per-node overrides fleet defaults)
+  const clientCert = node.clientCert || fleetTLS?.clientCert;
+  const clientKey = node.clientKey || fleetTLS?.clientKey;
+  const ca = fleetTLS?.ca;
+
+  if (clientCert && clientKey) {
+    try {
+      return {
+        tls: {
+          cert: loadCertFile(clientCert),
+          key: loadCertFile(clientKey),
+          ca: ca ? loadCertFile(ca) : undefined,
+        },
+      };
+    } catch (err) {
+      // Return empty if cert loading fails - error will be caught in queryFleetNode
+      console.error(pc.dim(`Warning: Failed to load TLS certs for ${node.name}: ${err}`));
+    }
+  }
+
+  return {};
+}
+
+/**
  * Query a single fleet node
  */
 export async function queryFleetNode(
   node: FleetNode,
   prompt: string,
-  options: { model?: string; system?: string } = {}
+  options: { model?: string; system?: string; fleetTLS?: FleetTLSConfig } = {}
 ): Promise<FleetQueryResult> {
   try {
     const headers: Record<string, string> = {
@@ -108,6 +142,9 @@ export async function queryFleetNode(
       headers['Authorization'] = `Bearer ${node.token}`;
     }
 
+    // Build TLS options if configured
+    const tlsOptions = buildTLSFetchOptions(node, options.fleetTLS);
+
     const response = await fetch(`${node.url}/v1/fleet/execute`, {
       method: 'POST',
       headers,
@@ -116,6 +153,7 @@ export async function queryFleetNode(
         model: options.model,
         system: options.system,
       }),
+      ...tlsOptions,
     });
 
     if (!response.ok) {
@@ -163,7 +201,7 @@ export async function queryFleetNode(
 export async function queryFleetNodes(
   nodes: FleetNode[],
   prompt: string,
-  options: { model?: string; system?: string; verbose?: boolean } = {}
+  options: { model?: string; system?: string; verbose?: boolean; fleetTLS?: FleetTLSConfig } = {}
 ): Promise<FleetQueryResult[]> {
   if (options.verbose) {
     console.error(pc.dim(`\n📡 Querying ${nodes.length} fleet node(s): ${nodes.map(n => n.name).join(', ')}`));
@@ -204,8 +242,10 @@ export async function getFleetHealth(config: FleetConfig): Promise<Array<{ node:
   const results = await Promise.all(
     config.nodes.map(async node => {
       try {
+        const tlsOptions = buildTLSFetchOptions(node, config.tls);
         const response = await fetch(`${node.url}/v1/fleet/health`, {
           signal: AbortSignal.timeout(5000),
+          ...tlsOptions,
         });
 
         if (response.ok) {
@@ -234,7 +274,8 @@ export interface UpgradeResult {
  */
 export async function upgradeFleetNode(
   node: FleetNode,
-  performUpgrade: boolean = false
+  performUpgrade: boolean = false,
+  fleetTLS?: FleetTLSConfig
 ): Promise<UpgradeResult> {
   try {
     const headers: Record<string, string> = {
@@ -245,11 +286,13 @@ export async function upgradeFleetNode(
       headers['Authorization'] = `Bearer ${node.token}`;
     }
 
+    const tlsOptions = buildTLSFetchOptions(node, fleetTLS);
     const method = performUpgrade ? 'POST' : 'GET';
     const response = await fetch(`${node.url}/v1/fleet/upgrade`, {
       method,
       headers,
       signal: AbortSignal.timeout(60000), // Longer timeout for upgrades
+      ...tlsOptions,
     });
 
     if (!response.ok) {

@@ -140,7 +140,13 @@ async function downloadFile(url: string): Promise<Buffer> {
  * Calculate SHA256 hash of a buffer
  */
 async function sha256(buffer: Buffer): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  // Convert Buffer to ArrayBuffer for crypto.subtle.digest compatibility
+  // slice() always returns a new ArrayBuffer (not SharedArrayBuffer)
+  const arrayBuffer = buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength
+  ) as ArrayBuffer;
+  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }

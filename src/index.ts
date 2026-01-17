@@ -2,7 +2,7 @@
 import ora from 'ora';
 import pc from 'picocolors';
 import { Glob } from 'bun';
-import { parseArgs, printHelp, createTemplateConfig, getDefaultSystemPrompt, type Verbosity } from './config';
+import { parseArgs, printHelp, createTemplateConfig, getDefaultSystemPrompt, getServerTLSConfig, type Verbosity, type ServerTLSConfig } from './config';
 import { getProvider, type StreamOptions, type Message, type Provider, type StreamChunk } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
 import { renderMarkdown } from './utils/markdown';
@@ -21,6 +21,7 @@ Available tools:
 - read_file: Read file contents
 - list_files: List directory contents
 - edit_file: Make targeted edits to files
+- version: Get your own version and system info
 - fleet_list: List all configured fleet nodes and their health
 - fleet_query: Query a remote fleet node (params: node, prompt)
 - fleet_broadcast: Send a prompt to ALL fleet nodes
@@ -30,6 +31,7 @@ Use tools proactively when they would help answer the user's question. For examp
 - "What's in this directory?" → Use list_files or bash with "ls"
 - "Show me the contents of config.json" → Use read_file
 - "What's my IP address?" → Use bash with "curl ifconfig.me" or similar
+- "What version are you running?" → Use version tool
 - "Check disk space on server1" → Use fleet_query with node="server1"
 - "What's the status of all servers?" → Use fleet_broadcast
 
@@ -573,7 +575,20 @@ async function main(): Promise<void> {
   // Server mode
   if (args.server) {
     const { startServer } = await import('./server');
-    await startServer({ port: args.port, token: args.token });
+
+    // Build TLS config: CLI args override config file
+    let tlsConfig: ServerTLSConfig | undefined;
+    if (args.cert && args.key) {
+      tlsConfig = {
+        cert: args.cert,
+        key: args.key,
+        ca: args.ca,
+      };
+    } else {
+      tlsConfig = getServerTLSConfig();
+    }
+
+    await startServer({ port: args.port, token: args.token, tls: tlsConfig });
     return;
   }
 

@@ -1,6 +1,6 @@
 import { homedir } from 'os';
-import { join } from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { join, resolve } from 'path';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 
 const CONFIG_DIR = join(homedir(), '.config', 'ai');
 const CONFIG_PATH = join(CONFIG_DIR, 'config.json');
@@ -11,16 +11,42 @@ export interface ProviderConfig {
   defaultModel?: string;
 }
 
+// Server TLS config
+export interface ServerTLSConfig {
+  enabled?: boolean;
+  cert: string;      // Path to server certificate
+  key: string;       // Path to server private key
+  ca?: string;       // Path to CA cert for client verification
+  requestCert?: boolean;  // Require client certs (default: true when ca provided)
+}
+
+// Fleet TLS config (client-side)
+export interface FleetTLSConfig {
+  ca?: string;           // CA cert for server verification
+  clientCert?: string;   // Default client cert for all nodes
+  clientKey?: string;    // Default client key for all nodes
+}
+
 export interface FleetNodeConfig {
   url: string;
   token?: string;
   description?: string;
   systemPrompt?: string;
+  // TLS fields for per-node override
+  clientCert?: string;   // Per-node client cert override
+  clientKey?: string;    // Per-node client key override
 }
 
 export interface FleetConfig {
   token?: string;
+  tls?: FleetTLSConfig;
   nodes: Record<string, FleetNodeConfig>;
+}
+
+export interface ServerConfig {
+  port?: number;
+  token?: string;
+  tls?: ServerTLSConfig;
 }
 
 export interface AIConfig {
@@ -33,6 +59,7 @@ export interface AIConfig {
     deepseek?: ProviderConfig;
     ollama?: ProviderConfig;
   };
+  server?: ServerConfig;
   fleet?: FleetConfig;
   defaults?: {
     model?: string;
@@ -145,6 +172,45 @@ export function getDefaultSystemPrompt(): string | undefined {
   return config.defaults?.systemPrompt;
 }
 
+/**
+ * Load a certificate file from disk
+ * Supports ~ expansion for home directory
+ */
+export function loadCertFile(path: string): string {
+  const resolved = path.startsWith('~')
+    ? path.replace('~', process.env.HOME || homedir())
+    : resolve(path);
+
+  if (!existsSync(resolved)) {
+    throw new Error(`Certificate file not found: ${resolved}`);
+  }
+  return readFileSync(resolved, 'utf-8');
+}
+
+/**
+ * Get server configuration
+ */
+export function getServerConfig(): ServerConfig | undefined {
+  const config = loadConfig();
+  return config.server;
+}
+
+/**
+ * Get server TLS configuration
+ */
+export function getServerTLSConfig(): ServerTLSConfig | undefined {
+  const config = loadConfig();
+  return config.server?.tls;
+}
+
+/**
+ * Get fleet TLS configuration
+ */
+export function getFleetTLSConfig(): FleetTLSConfig | undefined {
+  const config = loadConfig();
+  return config.fleet?.tls;
+}
+
 export type Verbosity = 'quiet' | 'normal' | 'verbose';
 
 export interface CLIArgs {
@@ -162,6 +228,10 @@ export interface CLIArgs {
   port: number;
   token?: string;
   configInit?: boolean;
+  // TLS options
+  cert?: string;   // Server certificate path
+  key?: string;    // Server private key path
+  ca?: string;     // CA certificate path for client verification
 }
 
 export function parseArgs(args: string[]): CLIArgs {
@@ -211,6 +281,12 @@ export function parseArgs(args: string[]): CLIArgs {
       result.token = args[++i];
     } else if (arg === '--config-init') {
       result.configInit = true;
+    } else if (arg === '--cert') {
+      result.cert = args[++i];
+    } else if (arg === '--key') {
+      result.key = args[++i];
+    } else if (arg === '--ca') {
+      result.ca = args[++i];
     } else if (!arg.startsWith('-')) {
       result.prompt.push(arg);
     }
@@ -250,6 +326,9 @@ Server Mode:
   --server                      Start as HTTP server (OpenAI-compatible API)
   -p, --port <port>             Server port (default: 8080)
   --token <token>               Bearer token for auth (or set in config)
+  --cert <path>                 Server certificate file (enables HTTPS)
+  --key <path>                  Server private key file
+  --ca <path>                   CA certificate for client verification (enables mTLS)
 
 Configuration:
   --config-init                 Create a template config file
@@ -301,12 +380,26 @@ export function createTemplateConfig(): void {
         baseUrl: "http://localhost:11434"
       }
     },
+    server: {
+      port: 9090,
+      token: "your-server-token",
+      tls: {
+        cert: "~/.config/ai/certs/server.pem",
+        key: "~/.config/ai/certs/server-key.pem",
+        ca: "~/.config/ai/certs/ca.pem"
+      }
+    },
     fleet: {
       token: "your-fleet-token",
+      tls: {
+        ca: "~/.config/ai/certs/ca.pem",
+        clientCert: "~/.config/ai/certs/client.pem",
+        clientKey: "~/.config/ai/certs/client-key.pem"
+      },
       nodes: {
         "example-server": {
-          url: "http://example.com:9090",
-          description: "Example fleet node",
+          url: "https://example.com:9443",
+          description: "Example fleet node with mTLS",
           systemPrompt: "You are a helpful assistant on the example server."
         }
       }
