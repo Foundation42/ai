@@ -1,18 +1,87 @@
 # AI CLI
 
-A reasoning engine for DevOps.
+**A reasoning engine for DevOps.**
 
-A powerful command-line interface for interacting with LLMs. Built with Bun, featuring multi-provider support, tool execution, and batch processing.
+Talk to your servers like you talk to a colleague. Ask questions in plain English, get answers from anywhere in your infrastructure.
+
+```bash
+ai "which server has the highest CPU load right now?"
+ai "check for security vulnerabilities on all web servers"
+ai "install nginx on @web1, configure it for myapp, and verify it's running"
+```
+
+## What It Is
+
+AI CLI is a command-line tool that connects large language models (LLMs) to your infrastructure. It's not just a chatbot—it can **execute commands**, **read and edit files**, **query remote servers**, and **manage entire fleets** of machines.
+
+Think of it as giving every server in your infrastructure the ability to understand and respond to natural language.
+
+## What It Does
+
+| Capability | Description |
+|------------|-------------|
+| **Execute** | Run bash commands, read/write files, explore systems |
+| **Reason** | Analyze logs, diagnose issues, suggest fixes |
+| **Orchestrate** | Query and manage fleets of servers with @ mentions |
+| **Self-Manage** | Fleet nodes auto-upgrade from GitHub releases |
+| **Secure** | mTLS authentication, token-based auth, confirmation prompts |
+
+## Why You Need It
+
+**The Problem:** DevOps is drowning in complexity. Dozens of servers, hundreds of config files, thousands of logs. You spend more time *finding* information than *acting* on it.
+
+**The Solution:** Ask questions in plain English. The AI figures out which commands to run, which files to read, which servers to query—and does it for you.
+
+```bash
+# Instead of: ssh web1 "df -h" && ssh web2 "df -h" && ssh db1 "df -h" | grep ...
+ai "which servers are running low on disk space?"
+
+# Instead of: grep -r "ERROR" /var/log/*.log | awk ... | sort | uniq -c | ...
+ai "summarize the errors in today's logs and suggest fixes"
+
+# Instead of: writing a bash script to check 10 servers
+ai "verify nginx is running on all web servers, restart any that are down"
+```
+
+## What It Enables
+
+- **Conversational Infrastructure** — Query your entire fleet like a database
+- **Autonomous Operations** — Fleet nodes that monitor, report, and fix themselves
+- **Secure Delegation** — Give AI access to servers without sharing SSH keys
+- **Tribal Knowledge Capture** — Encode your expertise in system prompts
+- **Hierarchical Fleets** — Nodes can query other nodes, building intelligent meshes
+
+## Zero to Hero
+
+```bash
+# 1. Install
+curl -sL https://github.com/Foundation42/ai/releases/latest/download/ai-linux-x64 \
+  -o /usr/local/bin/ai && chmod +x /usr/local/bin/ai
+
+# 2. Configure (add your API key)
+ai --config-init
+nano ~/.config/ai/config.json
+
+# 3. Use locally
+ai "what's using the most disk space?"
+
+# 4. Deploy to servers (see Fleet Tutorial below)
+# 5. Query your entire infrastructure in plain English
+ai "check the health of all production servers"
+```
 
 ## Features
 
-- **Multiple Providers** - Google Gemini, Anthropic Claude, OpenAI, Mistral, DeepSeek, Ollama
-- **Three Modes** - Pipe, Standalone, and Interactive REPL
-- **Tool Execution** - AI can run bash commands, read/edit files, explore directories
-- **Map/Reduce** - Batch process multiple inputs with optional aggregation
-- **Glob Patterns** - Process files matching patterns like `src/**/*.ts`
-- **Markdown Rendering** - Styled terminal output with syntax highlighting
-- **Configurable** - Provider priority, API keys, verbosity levels
+- **Multiple Providers** — Google Gemini, Anthropic Claude, OpenAI, Mistral, DeepSeek, Ollama
+- **Three Modes** — Pipe, Standalone, and Interactive REPL
+- **Tool Execution** — AI can run bash commands, read/edit files, explore directories
+- **Fleet Orchestration** — Query and manage remote servers with @ mentions
+- **Auto-Upgrade** — Fleet nodes upgrade themselves from GitHub releases
+- **mTLS Security** — Mutual TLS authentication for fleet communication
+- **Map/Reduce** — Batch process multiple inputs with optional aggregation
+- **Glob Patterns** — Process files matching patterns like `src/**/*.ts`
+- **Markdown Rendering** — Styled terminal output with syntax highlighting
+- **systemd Integration** — Production-ready with automatic restarts
 
 ## Installation
 
