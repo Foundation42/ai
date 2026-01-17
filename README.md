@@ -21,6 +21,30 @@ ai "check disk space on all my servers"
 ai "deploy the latest version to @production"
 ```
 
+## How It's Different
+
+**Not another coding assistant.** Tools like Claude Code, GitHub Copilot, Cursor, and Codex are designed for software development—writing code, completing functions, explaining syntax.
+
+AI CLI is designed for **operations**:
+
+| Coding Assistants | AI CLI |
+|-------------------|--------|
+| Write code for you | Run commands for you |
+| Work in your IDE | Work in your terminal |
+| Understand code | Understand systems |
+| Help you develop | Help you operate |
+| Single machine | Entire fleet |
+
+**Key differences:**
+
+- **Runs on servers, not just your laptop** — Deploy AI CLI to your infrastructure and query machines remotely with `@mentions`
+- **Fleet orchestration** — Manage dozens of machines with natural language: `"check disk space on all web servers"`
+- **Self-managing nodes** — Fleet nodes auto-upgrade themselves from GitHub releases
+- **Production-ready security** — mTLS authentication, token auth, confirmation prompts for dangerous commands
+- **Not just code** — Find files, analyze logs, monitor systems, manage services, troubleshoot problems
+
+Think of it this way: coding assistants help you *build* software. AI CLI helps you *run* it.
+
 ## What It Is
 
 AI CLI is a command-line tool that connects large language models (LLMs) to your system. It's not just a chatbot—it can **execute commands**, **read and edit files**, **explore codebases**, and optionally **manage remote machines**.
