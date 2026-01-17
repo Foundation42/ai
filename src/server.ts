@@ -91,6 +91,7 @@ Available tools:
 - read_file: Read file contents
 - list_files: List directory contents
 - edit_file: Make targeted edits to files
+- web_fetch: Fetch content from URLs (web pages, APIs, raw files)
 - version: Get your own version and system info
 
 Use tools proactively when they would help answer the user's question. For example:
@@ -98,6 +99,7 @@ Use tools proactively when they would help answer the user's question. For examp
 - "What's in this directory?" → Use list_files or bash with "ls"
 - "Show me the contents of config.json" → Use read_file
 - "What's my IP address?" → Use bash with "curl ifconfig.me" or similar
+- "Fetch the README from GitHub" → Use web_fetch with the URL
 - "What version are you running?" → Use version tool
 
 Always try to use your tools to get real, accurate information rather than saying you can't help.`;

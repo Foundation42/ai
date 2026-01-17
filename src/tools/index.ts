@@ -3,6 +3,7 @@ import { BashTool } from './bash';
 import { ReadFileTool } from './read_file';
 import { ListFilesTool } from './list_files';
 import { EditFileTool } from './edit_file';
+import { WebFetchTool } from './web_fetch';
 import { FleetQueryTool, FleetListTool, FleetBroadcastTool, FleetUpgradeTool, FleetRestartTool } from './fleet';
 import { VersionTool } from './version';
 import { MCPAddTool, MCPRemoveTool, MCPUpdateTool, MCPListTool } from './mcp_manage';
@@ -16,6 +17,7 @@ tools.set('bash', new BashTool());
 tools.set('read_file', new ReadFileTool());
 tools.set('list_files', new ListFilesTool());
 tools.set('edit_file', new EditFileTool());
+tools.set('web_fetch', new WebFetchTool());
 tools.set('version', new VersionTool());
 
 // Register fleet tools
