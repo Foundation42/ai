@@ -43,11 +43,17 @@ export interface FleetConfig {
   nodes: Record<string, FleetNodeConfig>;
 }
 
+export interface AutoUpgradeConfig {
+  enabled?: boolean;      // Enable periodic polling (default: false)
+  interval?: number;      // Poll interval in ms (default: 60000 = 1 minute)
+}
+
 export interface ServerConfig {
   port?: number;
   token?: string;
   tls?: ServerTLSConfig;
   autoConfirm?: boolean;  // Auto-confirm dangerous commands (use with caution)
+  autoUpgrade?: AutoUpgradeConfig;  // Auto-upgrade polling config
 }
 
 // MCP Server configuration (local stdio or remote SSE)
@@ -238,6 +244,14 @@ export function getServerAutoConfirm(): boolean {
 }
 
 /**
+ * Get auto-upgrade configuration
+ */
+export function getAutoUpgradeConfig(): AutoUpgradeConfig {
+  const config = loadConfig();
+  return config.server?.autoUpgrade || { enabled: false };
+}
+
+/**
  * Get MCP servers configuration
  */
 export function getMCPServersConfig(): Record<string, MCPServerConfig> {
@@ -418,6 +432,10 @@ export function createTemplateConfig(): void {
       port: 9090,
       token: "your-server-token",
       autoConfirm: true,  // Allow dangerous commands like systemctl
+      autoUpgrade: {
+        enabled: true,     // Enable periodic upgrade checks
+        interval: 60000    // Check every minute (in milliseconds)
+      },
       tls: {
         cert: "~/.config/ai/certs/server.pem",
         key: "~/.config/ai/certs/server-key.pem",

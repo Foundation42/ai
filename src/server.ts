@@ -1,7 +1,7 @@
 import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
-import { getDefaultSystemPrompt, loadCertFile, getServerAutoConfirm, type ServerTLSConfig } from './config';
-import { checkForUpgrade, performUpgrade } from './upgrade';
+import { getDefaultSystemPrompt, loadCertFile, getServerAutoConfirm, getAutoUpgradeConfig, type ServerTLSConfig } from './config';
+import { checkForUpgrade, performUpgrade, loadUpgradeState, saveUpgradeState } from './upgrade';
 import pc from 'picocolors';
 
 // Version is injected at build time via --define
@@ -10,6 +10,79 @@ const VERSION = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.1.0-dev';
 
 // Confirmation function for tool execution - respects server autoConfirm setting
 const serverConfirmFn = async () => getServerAutoConfirm();
+
+// Auto-upgrade polling timer
+let upgradeTimer: Timer | null = null;
+
+/**
+ * Start background polling for upgrades
+ */
+function startUpgradePolling(currentVersion: string): void {
+  const config = getAutoUpgradeConfig();
+
+  if (!config.enabled) {
+    return;
+  }
+
+  const interval = config.interval || 60000; // Default 1 minute
+
+  console.log(pc.dim(`   Auto-upgrade polling enabled (every ${interval / 1000}s)`));
+
+  const checkAndUpgrade = async () => {
+    try {
+      const state = loadUpgradeState();
+
+      // Check for upgrade
+      const check = await checkForUpgrade(currentVersion);
+
+      // Update state
+      saveUpgradeState({
+        ...state,
+        lastCheckTime: Date.now(),
+        lastCheckVersion: check.latestVersion,
+      });
+
+      if (check.available && check.release) {
+        console.log(pc.yellow(`\n🔄 New version available: v${check.latestVersion}`));
+        console.log(pc.dim('   Starting auto-upgrade...'));
+
+        // Mark upgrade in progress
+        saveUpgradeState({
+          lastCheckTime: Date.now(),
+          lastCheckVersion: check.latestVersion,
+          upgradeInProgress: true,
+          previousVersion: currentVersion,
+        });
+
+        // Perform upgrade (will restart)
+        const result = await performUpgrade(currentVersion, { restart: true });
+
+        if (result.success) {
+          console.log(pc.green(`✓ Upgraded to v${result.latestVersion}`));
+          if (result.restarting) {
+            // Clear timer before exit
+            if (upgradeTimer) clearInterval(upgradeTimer);
+            process.exit(0);
+          }
+        } else {
+          console.log(pc.red(`✗ Upgrade failed: ${result.message}`));
+          // Clear upgrade in progress on failure
+          saveUpgradeState({
+            lastCheckTime: Date.now(),
+            lastCheckVersion: check.latestVersion,
+            upgradeInProgress: false,
+          });
+        }
+      }
+    } catch (err) {
+      console.error(pc.dim(`Auto-upgrade check failed: ${err}`));
+    }
+  };
+
+  // Run immediately on startup (with small delay), then at interval
+  setTimeout(checkAndUpgrade, 5000); // 5s delay on startup
+  upgradeTimer = setInterval(checkAndUpgrade, interval);
+}
 
 const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the user's system.
 
@@ -182,6 +255,9 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
   const protocol = tlsConfig ? 'https' : 'http';
   console.log(pc.green(`✓ Server listening on ${protocol}://localhost:${server.port}`));
+
+  // Start upgrade polling if enabled
+  startUpgradePolling(VERSION);
 }
 
 async function handleChatCompletions(req: Request): Promise<Response> {

@@ -1,4 +1,6 @@
-import { existsSync, unlinkSync, renameSync, chmodSync, writeFileSync } from 'fs';
+import { existsSync, unlinkSync, renameSync, chmodSync, writeFileSync, readFileSync } from 'fs';
+import { homedir } from 'os';
+import { ensureConfigDir } from './config';
 
 /**
  * Check if running under systemd
@@ -30,6 +32,37 @@ export interface UpgradeResult {
   currentVersion?: string;
   latestVersion?: string;
   restarting?: boolean;
+}
+
+export interface UpgradeState {
+  lastCheckTime?: number;       // Timestamp of last check
+  lastCheckVersion?: string;    // Last seen version
+  upgradeInProgress?: boolean;  // If upgrade was started
+  previousVersion?: string;     // Version before upgrade (for rollback info)
+}
+
+const STATE_PATH = join(homedir(), '.config', 'ai', 'upgrade-state.json');
+
+/**
+ * Load upgrade state from disk
+ */
+export function loadUpgradeState(): UpgradeState {
+  try {
+    if (existsSync(STATE_PATH)) {
+      return JSON.parse(readFileSync(STATE_PATH, 'utf-8'));
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return {};
+}
+
+/**
+ * Save upgrade state to disk
+ */
+export function saveUpgradeState(state: UpgradeState): void {
+  ensureConfigDir();
+  writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
 }
 
 /**
