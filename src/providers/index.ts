@@ -28,11 +28,12 @@ export function createProvider(name: ProviderName, config?: ProviderConfig): Pro
 }
 
 export function parseModelString(modelString: string): { provider: ProviderName; model: string } | null {
-  const parts = modelString.split(':');
-  if (parts.length === 2 && parts[0] && parts[1]) {
-    const providerName = parts[0].toLowerCase() as ProviderName;
-    if (providerName in providers) {
-      return { provider: providerName, model: parts[1] };
+  const colonIndex = modelString.indexOf(':');
+  if (colonIndex > 0) {
+    const providerName = modelString.slice(0, colonIndex).toLowerCase() as ProviderName;
+    const model = modelString.slice(colonIndex + 1);
+    if (providerName in providers && model) {
+      return { provider: providerName, model };
     }
   }
   return null;
