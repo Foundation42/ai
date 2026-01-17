@@ -14,12 +14,16 @@ export class OllamaProvider implements Provider {
 
   async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<string> {
     const model = options.model || this.defaultModel;
-    const messages = [];
 
-    if (options.systemPrompt) {
-      messages.push({ role: 'system', content: options.systemPrompt });
+    // Use provided messages or build from prompt
+    let messages = options.messages;
+    if (!messages) {
+      messages = [];
+      if (options.systemPrompt) {
+        messages.push({ role: 'system', content: options.systemPrompt });
+      }
+      messages.push({ role: 'user', content: prompt });
     }
-    messages.push({ role: 'user', content: prompt });
 
     const response = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',

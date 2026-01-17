@@ -20,12 +20,15 @@ export class DeepSeekProvider implements Provider {
     }
 
     const model = options.model || this.defaultModel;
-    const messages: Message[] = [];
 
-    if (options.systemPrompt) {
-      messages.push({ role: 'system', content: options.systemPrompt });
+    // Use provided messages or build from prompt
+    let messages: Message[] = options.messages || [];
+    if (!options.messages) {
+      if (options.systemPrompt) {
+        messages.push({ role: 'system', content: options.systemPrompt });
+      }
+      messages.push({ role: 'user', content: prompt });
     }
-    messages.push({ role: 'user', content: prompt });
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',

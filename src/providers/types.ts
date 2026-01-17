@@ -6,6 +6,7 @@ export interface Message {
 export interface StreamOptions {
   model?: string;
   systemPrompt?: string;
+  messages?: Message[];  // For multi-turn conversations (overrides prompt if provided)
 }
 
 export interface Provider {

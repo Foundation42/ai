@@ -1,4 +1,4 @@
-import type { Provider, ProviderConfig, StreamOptions } from './types';
+import type { Provider, ProviderConfig, StreamOptions, Message } from './types';
 
 export class AnthropicProvider implements Provider {
   name = 'anthropic';
@@ -21,6 +21,21 @@ export class AnthropicProvider implements Provider {
 
     const model = options.model || this.defaultModel;
 
+    // Build messages and extract system prompt
+    let systemPrompt = options.systemPrompt;
+    let messages: Message[];
+
+    if (options.messages) {
+      // Extract system message if present (Anthropic requires it separate)
+      const systemMsg = options.messages.find(m => m.role === 'system');
+      if (systemMsg) {
+        systemPrompt = systemMsg.content;
+      }
+      messages = options.messages.filter(m => m.role !== 'system');
+    } else {
+      messages = [{ role: 'user', content: prompt }];
+    }
+
     const response = await fetch(`${this.baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
@@ -31,8 +46,8 @@ export class AnthropicProvider implements Provider {
       body: JSON.stringify({
         model,
         max_tokens: 4096,
-        system: options.systemPrompt || undefined,
-        messages: [{ role: 'user', content: prompt }],
+        system: systemPrompt || undefined,
+        messages,
         stream: true,
       }),
     });

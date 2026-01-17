@@ -1,4 +1,4 @@
-import type { Provider, ProviderConfig, StreamOptions } from './types';
+import type { Provider, ProviderConfig, StreamOptions, Message } from './types';
 
 export class GoogleProvider implements Provider {
   name = 'google';
@@ -14,6 +14,24 @@ export class GoogleProvider implements Provider {
     }
   }
 
+  private convertMessages(messages: Message[]): Array<{ role: string; parts: Array<{ text: string }> }> {
+    // Convert standard messages to Google format, handling system as user+model pair
+    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+
+    for (const msg of messages) {
+      if (msg.role === 'system') {
+        // Google doesn't have system role, simulate with user+model pair
+        contents.push({ role: 'user', parts: [{ text: msg.content }] });
+        contents.push({ role: 'model', parts: [{ text: 'Understood. I will follow these instructions.' }] });
+      } else {
+        const role = msg.role === 'assistant' ? 'model' : 'user';
+        contents.push({ role, parts: [{ text: msg.content }] });
+      }
+    }
+
+    return contents;
+  }
+
   async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<string> {
     if (!this.apiKey) {
       throw new Error('Google API key not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY environment variable.');
@@ -21,21 +39,18 @@ export class GoogleProvider implements Provider {
 
     const model = options.model || this.defaultModel;
 
-    const contents = [];
-    if (options.systemPrompt) {
-      contents.push({
-        role: 'user',
-        parts: [{ text: options.systemPrompt }],
-      });
-      contents.push({
-        role: 'model',
-        parts: [{ text: 'Understood. I will follow these instructions.' }],
-      });
+    let contents: Array<{ role: string; parts: Array<{ text: string }> }>;
+
+    if (options.messages) {
+      contents = this.convertMessages(options.messages);
+    } else {
+      contents = [];
+      if (options.systemPrompt) {
+        contents.push({ role: 'user', parts: [{ text: options.systemPrompt }] });
+        contents.push({ role: 'model', parts: [{ text: 'Understood. I will follow these instructions.' }] });
+      }
+      contents.push({ role: 'user', parts: [{ text: prompt }] });
     }
-    contents.push({
-      role: 'user',
-      parts: [{ text: prompt }],
-    });
 
     const response = await fetch(
       `${this.baseUrl}/models/${model}:streamGenerateContent?key=${this.apiKey}&alt=sse`,
