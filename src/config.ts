@@ -15,6 +15,7 @@ export interface FleetNodeConfig {
   url: string;
   token?: string;
   description?: string;
+  systemPrompt?: string;
 }
 
 export interface FleetConfig {
@@ -37,6 +38,7 @@ export interface AIConfig {
     model?: string;
     verbosity?: 'quiet' | 'normal' | 'verbose';
     autoConfirm?: boolean;
+    systemPrompt?: string;
   };
 }
 
@@ -133,6 +135,14 @@ export function getDefaultProvider(): string | undefined {
 export function getDefaultModel(): string | undefined {
   const config = loadConfig();
   return config.defaults?.model;
+}
+
+/**
+ * Get default system prompt (personality/role)
+ */
+export function getDefaultSystemPrompt(): string | undefined {
+  const config = loadConfig();
+  return config.defaults?.systemPrompt;
 }
 
 export type Verbosity = 'quiet' | 'normal' | 'verbose';
@@ -296,14 +306,16 @@ export function createTemplateConfig(): void {
       nodes: {
         "example-server": {
           url: "http://example.com:9090",
-          description: "Example fleet node"
+          description: "Example fleet node",
+          systemPrompt: "You are a helpful assistant on the example server."
         }
       }
     },
     defaults: {
       model: "google:gemini-2.0-flash",
       verbosity: "normal",
-      autoConfirm: false
+      autoConfirm: false,
+      systemPrompt: "You are a helpful DevOps assistant."
     }
   };
 

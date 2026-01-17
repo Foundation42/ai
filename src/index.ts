@@ -2,7 +2,7 @@
 import ora from 'ora';
 import pc from 'picocolors';
 import { Glob } from 'bun';
-import { parseArgs, printHelp, createTemplateConfig, type Verbosity } from './config';
+import { parseArgs, printHelp, createTemplateConfig, getDefaultSystemPrompt, type Verbosity } from './config';
 import { getProvider, type StreamOptions, type Message, type Provider, type StreamChunk } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
 import { renderMarkdown } from './utils/markdown';
@@ -35,6 +35,34 @@ When a user mentions @nodename, use fleet_query to query that specific node.
 When a user mentions @all, use fleet_broadcast to query all nodes.
 
 Always try to use your tools to get real, accurate information rather than saying you can't help.`;
+
+/**
+ * Build the full system prompt by combining:
+ * 1. Config personality/role (defaults.systemPrompt)
+ * 2. Tool instructions (if tools enabled)
+ * 3. User-provided system prompt (-s flag) takes full precedence if provided
+ */
+function buildSystemPrompt(userSystemPrompt?: string, includeTools: boolean = true): string | undefined {
+  // User-provided system prompt takes full precedence
+  if (userSystemPrompt) {
+    return userSystemPrompt;
+  }
+
+  const parts: string[] = [];
+
+  // Add config personality/role
+  const configPrompt = getDefaultSystemPrompt();
+  if (configPrompt) {
+    parts.push(configPrompt);
+  }
+
+  // Add tool instructions
+  if (includeTools) {
+    parts.push(TOOL_SYSTEM_PROMPT);
+  }
+
+  return parts.length > 0 ? parts.join('\n\n') : undefined;
+}
 
 type Mode = 'pipe' | 'standalone' | 'repl';
 
@@ -180,8 +208,8 @@ async function runSingleShot(
   const useTools = provider.supportsTools;
   const messages: Message[] = [];
 
-  // Add system prompt: user-provided takes priority, otherwise use tool prompt if tools available
-  const systemPrompt = options.systemPrompt || (useTools ? TOOL_SYSTEM_PROMPT : undefined);
+  // Build system prompt: config personality + tools (unless user provided their own)
+  const systemPrompt = buildSystemPrompt(options.systemPrompt, useTools);
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
   }
@@ -261,8 +289,8 @@ async function runRepl(provider: Provider, options: StreamOptions, verbosity: Ve
   const useTools = provider.supportsTools;
   let commandHistory: string[] = [];
 
-  // Add system prompt: user-provided takes priority, otherwise use tool prompt if tools available
-  const systemPrompt = options.systemPrompt || (useTools ? TOOL_SYSTEM_PROMPT : undefined);
+  // Build system prompt: config personality + tools (unless user provided their own)
+  const systemPrompt = buildSystemPrompt(options.systemPrompt, useTools);
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
   }

@@ -123,14 +123,23 @@ Create `~/.config/ai/config.json` (or run `ai --config-init` to generate a templ
   "fleet": {
     "token": "your-fleet-token",
     "nodes": {
-      "server1": { "url": "http://10.0.1.10:9090", "description": "Web server" },
-      "server2": { "url": "http://10.0.1.11:9090", "description": "Database server" }
+      "server1": {
+        "url": "http://10.0.1.10:9090",
+        "description": "Web server",
+        "systemPrompt": "You are a web server administrator focused on nginx and application health."
+      },
+      "server2": {
+        "url": "http://10.0.1.11:9090",
+        "description": "Database server",
+        "systemPrompt": "You are a PostgreSQL database administrator. Focus on query performance and data integrity."
+      }
     }
   },
   "defaults": {
     "model": "google:gemini-2.0-flash",
     "verbosity": "normal",
-    "autoConfirm": false
+    "autoConfirm": false,
+    "systemPrompt": "You are a helpful DevOps assistant."
   }
 }
 ```

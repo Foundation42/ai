@@ -1,5 +1,6 @@
 import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
+import { getDefaultSystemPrompt } from './config';
 import pc from 'picocolors';
 
 const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the user's system.
@@ -17,6 +18,34 @@ Use tools proactively when they would help answer the user's question. For examp
 - "What's my IP address?" → Use bash with "curl ifconfig.me" or similar
 
 Always try to use your tools to get real, accurate information rather than saying you can't help.`;
+
+/**
+ * Build the full system prompt for fleet nodes by combining:
+ * 1. Config personality/role (defaults.systemPrompt)
+ * 2. Tool instructions (if tools enabled)
+ * 3. Request-provided system prompt takes full precedence if provided
+ */
+function buildSystemPrompt(requestSystemPrompt?: string, includeTools: boolean = true): string | undefined {
+  // Request-provided system prompt takes full precedence
+  if (requestSystemPrompt) {
+    return requestSystemPrompt;
+  }
+
+  const parts: string[] = [];
+
+  // Add config personality/role
+  const configPrompt = getDefaultSystemPrompt();
+  if (configPrompt) {
+    parts.push(configPrompt);
+  }
+
+  // Add tool instructions
+  if (includeTools) {
+    parts.push(TOOL_SYSTEM_PROMPT);
+  }
+
+  return parts.length > 0 ? parts.join('\n\n') : undefined;
+}
 
 interface ServerConfig {
   port: number;
@@ -279,8 +308,8 @@ async function handleFleetExecute(req: Request): Promise<Response> {
   const useTools = tools && provider.supportsTools;
 
   const messages: Message[] = [];
-  // Use provided system prompt, or default to tool prompt if tools enabled
-  const systemPrompt = system || (useTools ? TOOL_SYSTEM_PROMPT : undefined);
+  // Build system prompt: config personality + tools (unless request provided their own)
+  const systemPrompt = buildSystemPrompt(system, useTools);
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
   }
