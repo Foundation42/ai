@@ -143,14 +143,14 @@ Options:
 |----------|---------------|-------|---------|
 | Google | gemini-2.0-flash | Yes | GOOGLE_API_KEY |
 | Anthropic | claude-sonnet-4-20250514 | Yes | ANTHROPIC_API_KEY |
-| OpenAI | gpt-4o-mini | No | OPENAI_API_KEY |
+| OpenAI | gpt-4o-mini | Yes | OPENAI_API_KEY |
 | Mistral | mistral-small-latest | No | MISTRAL_API_KEY |
-| DeepSeek | deepseek-chat | No | DEEPSEEK_API_KEY |
+| DeepSeek | deepseek-chat | Yes | DEEPSEEK_API_KEY |
 | Ollama | gemma3:4b | No | (local) |
 
 ## Tools
 
-When using a provider with tool support (Google and Anthropic), the AI can:
+When using a provider with tool support (Google, Anthropic, OpenAI, DeepSeek), the AI can:
 
 | Tool | Description |
 |------|-------------|

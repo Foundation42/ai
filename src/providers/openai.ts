@@ -1,9 +1,10 @@
 import type { Provider, ProviderConfig, StreamOptions, Message, StreamChunk } from './types';
+import type { ToolDefinition } from '../tools/types';
 
 export class OpenAIProvider implements Provider {
   name = 'openai';
   defaultModel = 'gpt-4o-mini';
-  supportsTools = false;  // TODO: Add tool support
+  supportsTools = true;
   private apiKey: string;
   private baseUrl: string;
 
@@ -15,6 +16,50 @@ export class OpenAIProvider implements Provider {
     }
   }
 
+  private convertTools(tools: ToolDefinition[]): Array<Record<string, unknown>> {
+    return tools.map(t => ({
+      type: 'function',
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters,
+      },
+    }));
+  }
+
+  private convertMessages(messages: Message[]): Array<Record<string, unknown>> {
+    return messages.map(msg => {
+      if (msg.role === 'assistant' && msg.tool_calls?.length) {
+        // Assistant message with tool calls
+        return {
+          role: 'assistant',
+          content: msg.content || null,
+          tool_calls: msg.tool_calls.map(call => ({
+            id: call.id,
+            type: 'function',
+            function: {
+              name: call.name,
+              arguments: JSON.stringify(call.arguments),
+            },
+          })),
+        };
+      } else if (msg.role === 'tool') {
+        // Tool result message
+        return {
+          role: 'tool',
+          tool_call_id: msg.tool_call_id,
+          content: msg.content,
+        };
+      } else {
+        // Regular message
+        return {
+          role: msg.role,
+          content: msg.content,
+        };
+      }
+    });
+  }
+
   async *stream(prompt: string, options: StreamOptions = {}): AsyncIterable<StreamChunk> {
     if (!this.apiKey) {
       throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.');
@@ -23,12 +68,25 @@ export class OpenAIProvider implements Provider {
     const model = options.model || this.defaultModel;
 
     // Use provided messages or build from prompt
-    let messages: Message[] = options.messages || [];
-    if (!options.messages) {
+    let messages: Array<Record<string, unknown>>;
+    if (options.messages) {
+      messages = this.convertMessages(options.messages);
+    } else {
+      messages = [];
       if (options.systemPrompt) {
         messages.push({ role: 'system', content: options.systemPrompt });
       }
       messages.push({ role: 'user', content: prompt });
+    }
+
+    const body: Record<string, unknown> = {
+      model,
+      messages,
+      stream: true,
+    };
+
+    if (options.tools?.length) {
+      body.tools = this.convertTools(options.tools);
     }
 
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -37,11 +95,7 @@ export class OpenAIProvider implements Provider {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: true,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -56,6 +110,9 @@ export class OpenAIProvider implements Provider {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+
+    // Track tool calls being built (OpenAI can stream multiple tool calls)
+    const toolCalls: Map<number, { id: string; name: string; arguments: string }> = new Map();
 
     try {
       while (true) {
@@ -73,9 +130,65 @@ export class OpenAIProvider implements Provider {
 
           try {
             const data = JSON.parse(trimmed.slice(6));
-            const content = data.choices?.[0]?.delta?.content;
-            if (content) {
-              yield { type: 'text', content };
+            const delta = data.choices?.[0]?.delta;
+            const finishReason = data.choices?.[0]?.finish_reason;
+
+            // Handle text content
+            if (delta?.content) {
+              yield { type: 'text', content: delta.content };
+            }
+
+            // Handle tool calls
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const index = tc.index;
+
+                if (!toolCalls.has(index)) {
+                  // New tool call
+                  toolCalls.set(index, {
+                    id: tc.id || '',
+                    name: tc.function?.name || '',
+                    arguments: '',
+                  });
+                }
+
+                const call = toolCalls.get(index)!;
+
+                // Update with any new data
+                if (tc.id) call.id = tc.id;
+                if (tc.function?.name) call.name = tc.function.name;
+                if (tc.function?.arguments) call.arguments += tc.function.arguments;
+              }
+            }
+
+            // Emit tool calls when finished
+            if (finishReason === 'tool_calls' || finishReason === 'stop') {
+              for (const [, call] of toolCalls) {
+                if (call.id && call.name) {
+                  try {
+                    const args = call.arguments ? JSON.parse(call.arguments) : {};
+                    yield {
+                      type: 'tool_call',
+                      call: {
+                        id: call.id,
+                        name: call.name,
+                        arguments: args,
+                      },
+                    };
+                  } catch {
+                    // If JSON parsing fails, emit with empty args
+                    yield {
+                      type: 'tool_call',
+                      call: {
+                        id: call.id,
+                        name: call.name,
+                        arguments: {},
+                      },
+                    };
+                  }
+                }
+              }
+              toolCalls.clear();
             }
           } catch {
             // Skip invalid JSON lines
