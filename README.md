@@ -283,6 +283,165 @@ ai "Which server has the highest load?"
 | `fleet_broadcast` | Send prompt to all nodes |
 | `fleet_upgrade` | Check for and perform upgrades on fleet nodes |
 
+### Fleet Tutorial
+
+A step-by-step guide to setting up and using the AI fleet.
+
+#### Step 1: Deploy Fleet Nodes
+
+On each server you want to manage, download and install the AI binary:
+
+```bash
+# Download latest release
+curl -sL https://github.com/Foundation42/ai/releases/latest/download/ai-linux-x64 \
+  -o /usr/local/bin/ai
+chmod +x /usr/local/bin/ai
+
+# Verify installation
+ai --version
+```
+
+#### Step 2: Configure Fleet Nodes
+
+Create a config file on each node with an API key and server settings:
+
+```bash
+mkdir -p ~/.config/ai
+cat > ~/.config/ai/config.json << 'EOF'
+{
+  "server": {
+    "port": 9090,
+    "autoConfirm": true
+  },
+  "providers": {
+    "default": "google",
+    "google": { "apiKey": "your-api-key" }
+  }
+}
+EOF
+```
+
+#### Step 3: Start Fleet Nodes
+
+Start the AI server (with systemd for production):
+
+```bash
+# Quick start (for testing)
+AI_SERVER_TOKEN=your-fleet-token ai --server --port 9090
+
+# Production: create systemd service (see systemd section below)
+```
+
+#### Step 4: Configure Your Controller
+
+On your local machine, configure the fleet nodes:
+
+```bash
+cat > ~/.config/ai/config.json << 'EOF'
+{
+  "providers": {
+    "default": "google",
+    "google": { "apiKey": "your-api-key" }
+  },
+  "fleet": {
+    "token": "your-fleet-token",
+    "nodes": {
+      "web1": {
+        "url": "http://10.0.1.10:9090",
+        "description": "Web server 1"
+      },
+      "web2": {
+        "url": "http://10.0.1.11:9090",
+        "description": "Web server 2"
+      },
+      "db1": {
+        "url": "http://10.0.1.20:9090",
+        "description": "Database server"
+      }
+    }
+  },
+  "defaults": {
+    "model": "google:gemini-2.0-flash"
+  }
+}
+EOF
+```
+
+#### Step 5: Verify Fleet Health
+
+```bash
+# Check all nodes are online
+ai "list all fleet nodes and their status"
+
+# Expected output:
+# Fleet nodes:
+#   web1: healthy (web1.example.com)
+#   web2: healthy (web2.example.com)
+#   db1: healthy (db1.example.com)
+```
+
+#### Step 6: Basic Fleet Operations
+
+```bash
+# Query a single node
+ai "@web1 what's your current memory usage?"
+
+# Query all nodes
+ai "@all report disk space usage"
+
+# Let AI pick the right node
+ai "check the database server's replication status"
+
+# Run a command across all nodes
+ai "check uptime on all servers"
+```
+
+#### Step 7: Real-World Examples
+
+```bash
+# Monitor logs across fleet
+ai "check for errors in /var/log/syslog on all servers in the last hour"
+
+# Find resource hogs
+ai "which server has the highest CPU usage right now?"
+
+# Coordinate deployments
+ai "@web1 pull the latest docker image for myapp"
+ai "@web2 pull the latest docker image for myapp"
+ai "verify myapp is running on all web servers"
+
+# Security audit
+ai "check for failed SSH login attempts on all servers"
+
+# Install packages fleet-wide
+ai "install htop on all servers using apt"
+
+# Check service status
+ai "is nginx running on all web servers? restart it if not"
+```
+
+#### Step 8: Fleet Upgrades
+
+Keep your fleet up to date:
+
+```bash
+# Check for available upgrades
+ai "check for upgrades on all fleet nodes"
+
+# Upgrade all nodes
+ai "upgrade all fleet nodes to the latest version"
+
+# Verify versions
+ai "what version is each fleet node running?"
+```
+
+#### Tips
+
+- Use `server.autoConfirm: true` on fleet nodes to allow privileged commands
+- Use systemd with `Restart=always` for production deployments
+- Enable mTLS for secure communication (see mTLS section)
+- Fleet nodes can query each other - build hierarchical architectures
+
 ## Server Mode
 
 Run as an OpenAI-compatible API server with fleet management capabilities:
