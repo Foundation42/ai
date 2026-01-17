@@ -1,5 +1,7 @@
 # AI CLI
 
+A reasoning engine for DevOps.
+
 A powerful command-line interface for interacting with LLMs. Built with Bun, featuring multi-provider support, tool execution, and batch processing.
 
 ## Features
@@ -88,6 +90,19 @@ ai -g "src/**/*.ts" "Review this file" -y
 
 # Reduce: Combine results
 ai -g "src/*.ts" "List exports" --reduce "Create a summary table" -y
+```
+
+### DevOps Examples
+
+```bash
+# Semantic log analysis
+tail -1000 /var/log/syslog | ai "Find errors that look like memory leaks and suggest fixes"
+
+# Fleet health check
+for host in web{1..3}; do ssh $host "uptime && free -m"; done | ai "Summarize health status"
+
+# Config drift detection
+ai -g "/etc/nginx/sites-enabled/*" "Check for security misconfigurations" -y
 ```
 
 ## Configuration
