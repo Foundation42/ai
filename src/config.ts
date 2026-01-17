@@ -45,6 +45,7 @@ export interface CLIArgs {
   yes: boolean;
   map: boolean;
   reduce?: string;
+  glob?: string;
 }
 
 export function parseArgs(args: string[]): CLIArgs {
@@ -79,6 +80,9 @@ export function parseArgs(args: string[]): CLIArgs {
       result.map = true;
     } else if (arg === '--reduce') {
       result.reduce = args[++i];
+    } else if (arg === '--glob' || arg === '-g') {
+      result.glob = args[++i];
+      result.map = true; // --glob implies --map
     } else if (!arg.startsWith('-')) {
       result.prompt.push(arg);
     }
@@ -105,6 +109,7 @@ Options:
   -y, --yes                     Auto-confirm tool executions (use with caution)
   --map                         Process each stdin line separately
   --reduce <prompt>             Combine map results with a final prompt
+  -g, --glob <pattern>          Expand glob pattern and process each file (implies --map)
   -h, --help                    Show this help message
   -V, --version                 Show version
 
@@ -128,6 +133,7 @@ Examples:
 
 Map/Reduce:
   ls *.ts | ai --map "Describe this file" -y
-  find . -name "*.md" | ai --map "Summarize" --reduce "Combine into overview"
+  ai -g "src/**/*.ts" "Review this file" -y
+  ai -g "*.md" "Summarize" --reduce "Combine into overview"
 `);
 }

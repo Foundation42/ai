@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import ora from 'ora';
 import pc from 'picocolors';
+import { Glob } from 'bun';
 import { parseArgs, printHelp, loadEnvFile, type Verbosity } from './config';
 import { getProvider, type StreamOptions, type Message, type Provider, type StreamChunk } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
@@ -559,7 +560,46 @@ async function main(): Promise<void> {
 
   const prompt = args.prompt.join(' ');
 
-  // Map/Reduce mode
+  // Glob mode: expand pattern and run map/reduce
+  if (args.glob) {
+    const glob = new Glob(args.glob);
+    const items: string[] = [];
+
+    for await (const file of glob.scan('.')) {
+      items.push(file);
+    }
+
+    if (items.length === 0) {
+      console.error(pc.red(`Error: No files match pattern: ${args.glob}`));
+      process.exit(1);
+    }
+
+    items.sort(); // Consistent ordering
+
+    if (!isOutputPiped) {
+      console.error(pc.dim(`Found ${items.length} files matching "${args.glob}"\n`));
+    }
+
+    try {
+      await runMapReduce({
+        provider,
+        streamOptions,
+        prompt,
+        items,
+        reducePrompt: args.reduce,
+        verbosity: args.verbosity,
+        autoYes: args.yes,
+        isOutputPiped,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(pc.red(`Error: ${message}`));
+      process.exit(1);
+    }
+    return;
+  }
+
+  // Map/Reduce mode with piped input
   if (args.map && mode === 'pipe') {
     const stdinContent = await readStdin();
     const items = stdinContent.split('\n').filter(line => line.trim());
