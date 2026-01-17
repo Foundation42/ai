@@ -1,56 +1,36 @@
 import { homedir } from 'os';
 import { join } from 'path';
 
-export interface Config {
-  defaultProvider?: string;
-  defaultModel?: string;
-  providers?: {
-    ollama?: { host?: string; model?: string };
-    openai?: { apiKey?: string; model?: string };
-    anthropic?: { apiKey?: string; model?: string };
-    google?: { apiKey?: string; model?: string };
-  };
-  systemPrompt?: string;
-}
+const CONFIG_PATH = join(homedir(), '.aiconfig');
 
-const CONFIG_PATH = join(homedir(), '.config', 'ai', 'config.json');
-
-let cachedConfig: Config | null = null;
-
-export async function loadConfig(): Promise<Config> {
-  if (cachedConfig) {
-    return cachedConfig;
-  }
-
+/**
+ * Load environment variables from ~/.aiconfig file
+ * Format: KEY=value (one per line, # for comments)
+ */
+export async function loadEnvFile(): Promise<void> {
   try {
     const file = Bun.file(CONFIG_PATH);
     if (await file.exists()) {
-      cachedConfig = await file.json();
-      return cachedConfig!;
+      const content = await file.text();
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        // Skip comments and empty lines
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        const eqIndex = trimmed.indexOf('=');
+        if (eqIndex > 0) {
+          const key = trimmed.slice(0, eqIndex).trim();
+          const value = trimmed.slice(eqIndex + 1).trim();
+          // Only set if not already defined in environment
+          if (!process.env[key]) {
+            process.env[key] = value;
+          }
+        }
+      }
     }
   } catch {
-    // Config file doesn't exist or is invalid, use defaults
+    // Silently ignore errors reading config file
   }
-
-  cachedConfig = {};
-  return cachedConfig;
-}
-
-export async function saveConfig(config: Config): Promise<void> {
-  const configDir = join(homedir(), '.config', 'ai');
-
-  // Ensure directory exists
-  const dir = Bun.file(configDir);
-  try {
-    await Bun.write(join(configDir, '.keep'), '');
-  } catch {
-    // Directory creation might fail, try to create it
-    const { mkdir } = await import('fs/promises');
-    await mkdir(configDir, { recursive: true });
-  }
-
-  await Bun.write(CONFIG_PATH, JSON.stringify(config, null, 2));
-  cachedConfig = config;
 }
 
 export interface CLIArgs {
@@ -109,6 +89,10 @@ Providers:
   openai      OpenAI API (requires OPENAI_API_KEY)
   anthropic   Anthropic API (requires ANTHROPIC_API_KEY)
   google      Google Gemini API (requires GOOGLE_API_KEY or GEMINI_API_KEY)
+
+Config (~/.aiconfig):
+  OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY - API keys
+  AI_PROVIDER_ORDER - Comma-separated provider priority (default: ollama,anthropic,openai,google)
 
 Examples:
   ai "What is the capital of France?"

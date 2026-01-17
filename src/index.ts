@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import ora from 'ora';
 import pc from 'picocolors';
-import { parseArgs, printHelp, loadConfig } from './config';
+import { parseArgs, printHelp, loadEnvFile } from './config';
 import { getProvider, type StreamOptions } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
 
@@ -56,19 +56,18 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Load config and get provider
-  const config = await loadConfig();
-  const modelArg = args.model || config.defaultModel;
+  // Load config from ~/.aiconfig
+  await loadEnvFile();
 
   try {
-    const provider = getProvider({ model: modelArg });
+    const provider = getProvider({ model: args.model });
 
     const streamOptions: StreamOptions = {};
-    if (args.systemPrompt || config.systemPrompt) {
-      streamOptions.systemPrompt = args.systemPrompt || config.systemPrompt;
+    if (args.systemPrompt) {
+      streamOptions.systemPrompt = args.systemPrompt;
     }
-    if (modelArg && !modelArg.includes(':')) {
-      streamOptions.model = modelArg;
+    if (args.model && !args.model.includes(':')) {
+      streamOptions.model = args.model;
     }
 
     // Show spinner only when output is a TTY (not piped)

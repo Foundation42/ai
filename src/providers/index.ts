@@ -34,6 +34,33 @@ export function parseModelString(modelString: string): { provider: ProviderName;
   return null;
 }
 
+const DEFAULT_PROVIDER_ORDER: ProviderName[] = ['ollama', 'anthropic', 'openai', 'google'];
+
+function getProviderOrder(): ProviderName[] {
+  const orderEnv = process.env.AI_PROVIDER_ORDER;
+  if (orderEnv) {
+    const order = orderEnv.split(',').map(s => s.trim().toLowerCase()) as ProviderName[];
+    // Filter to only valid provider names
+    return order.filter(p => p in providers);
+  }
+  return DEFAULT_PROVIDER_ORDER;
+}
+
+function isProviderAvailable(name: ProviderName): boolean {
+  switch (name) {
+    case 'ollama':
+      return true; // Always available (local)
+    case 'openai':
+      return !!process.env.OPENAI_API_KEY;
+    case 'anthropic':
+      return !!process.env.ANTHROPIC_API_KEY;
+    case 'google':
+      return !!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
+    default:
+      return false;
+  }
+}
+
 export function detectProvider(config?: { model?: string }): { provider: ProviderName; model?: string } {
   // 1. Check if model string contains provider prefix (e.g., "openai:gpt-4")
   if (config?.model) {
@@ -43,18 +70,15 @@ export function detectProvider(config?: { model?: string }): { provider: Provide
     }
   }
 
-  // 2. Check environment variables for API keys
-  if (process.env.ANTHROPIC_API_KEY) {
-    return { provider: 'anthropic', model: config?.model };
-  }
-  if (process.env.OPENAI_API_KEY) {
-    return { provider: 'openai', model: config?.model };
-  }
-  if (process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) {
-    return { provider: 'google', model: config?.model };
+  // 2. Check providers in configured order
+  const order = getProviderOrder();
+  for (const name of order) {
+    if (isProviderAvailable(name)) {
+      return { provider: name, model: config?.model };
+    }
   }
 
-  // 3. Fall back to Ollama (local, no API key needed)
+  // 3. Fall back to Ollama (always available)
   return { provider: 'ollama', model: config?.model };
 }
 
