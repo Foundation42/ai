@@ -42,6 +42,7 @@ export interface CLIArgs {
   help: boolean;
   version: boolean;
   verbosity: Verbosity;
+  yes: boolean;
 }
 
 export function parseArgs(args: string[]): CLIArgs {
@@ -50,6 +51,7 @@ export function parseArgs(args: string[]): CLIArgs {
     help: false,
     version: false,
     verbosity: 'normal',
+    yes: false,
   };
 
   let i = 0;
@@ -68,6 +70,8 @@ export function parseArgs(args: string[]): CLIArgs {
       result.verbosity = 'verbose';
     } else if (arg === '-q' || arg === '--quiet') {
       result.verbosity = 'quiet';
+    } else if (arg === '-y' || arg === '--yes') {
+      result.yes = true;
     } else if (!arg.startsWith('-')) {
       result.prompt.push(arg);
     }
@@ -91,6 +95,7 @@ Options:
   -s, --system <prompt>         Set system prompt
   -v, --verbose                 Show tool call outputs
   -q, --quiet                   Hide tool calls entirely
+  -y, --yes                     Auto-confirm tool executions (use with caution)
   -h, --help                    Show this help message
   -V, --version                 Show version
 

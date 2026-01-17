@@ -98,16 +98,41 @@ function formatConfirmation(toolName: string, args: Record<string, unknown>): st
   return JSON.stringify(args);
 }
 
-async function confirmToolExecution(toolName: string, args: Record<string, unknown>): Promise<boolean> {
+async function confirmToolExecution(toolName: string, args: Record<string, unknown>, autoYes: boolean): Promise<boolean> {
   const display = formatConfirmation(toolName, args);
-  return new Promise((resolve) => {
-    process.stdout.write(pc.yellow(`\n⚠ ${pc.bold(toolName)}: ${display}? [y/N] `));
 
+  // Auto-confirm if --yes flag is set
+  if (autoYes) {
+    process.stderr.write(pc.yellow(`\n⚠ ${pc.bold(toolName)}: ${display} `) + pc.dim('(auto-confirmed)\n'));
+    return true;
+  }
+
+  process.stderr.write(pc.yellow(`\n⚠ ${pc.bold(toolName)}: ${display}? [y/N] `));
+
+  // Use /dev/tty for confirmation when stdin is piped
+  // This allows confirmation to work even with piped input
+  if (!process.stdin.isTTY) {
+    try {
+      const tty = Bun.file('/dev/tty');
+      const reader = tty.stream().getReader();
+      const { value } = await reader.read();
+      reader.releaseLock();
+      const char = value ? new TextDecoder().decode(value).toLowerCase().trim() : '';
+      console.error();
+      return char === 'y';
+    } catch {
+      // If /dev/tty is not available, deny by default
+      console.error(pc.dim(' (no tty, denied)'));
+      return false;
+    }
+  }
+
+  return new Promise((resolve) => {
     const onData = (chunk: Buffer) => {
       const char = chunk.toString().toLowerCase();
       process.stdin.removeListener('data', onData);
       process.stdin.setRawMode?.(false);
-      console.log();
+      console.error();
       resolve(char === 'y');
     };
 
@@ -123,7 +148,8 @@ async function runSingleShot(
   options: StreamOptions,
   mode: Mode,
   isOutputPiped: boolean,
-  verbosity: Verbosity
+  verbosity: Verbosity,
+  autoYes: boolean
 ): Promise<void> {
   const useTools = provider.supportsTools;
   const messages: Message[] = [];
@@ -167,7 +193,7 @@ async function runSingleShot(
 
       const result = await executeTool(call, async (tool, args) => {
         if (tool.requiresConfirmation?.(args)) {
-          return confirmToolExecution(tool.definition.name, args);
+          return confirmToolExecution(tool.definition.name, args, autoYes);
         }
         return true;
       });
@@ -202,7 +228,7 @@ async function runSingleShot(
   });
 }
 
-async function runRepl(provider: Provider, options: StreamOptions, verbosity: Verbosity): Promise<void> {
+async function runRepl(provider: Provider, options: StreamOptions, verbosity: Verbosity, autoYes: boolean): Promise<void> {
   const messages: Message[] = [];
   const useTools = provider.supportsTools;
 
@@ -335,7 +361,7 @@ async function runRepl(provider: Provider, options: StreamOptions, verbosity: Ve
 
           const result = await executeTool(call, async (tool, args) => {
             if (tool.requiresConfirmation?.(args)) {
-              return confirmToolExecution(tool.definition.name, args);
+              return confirmToolExecution(tool.definition.name, args, autoYes);
             }
             return true;
           });
@@ -402,7 +428,7 @@ async function main(): Promise<void> {
   }
 
   if (mode === 'repl') {
-    await runRepl(provider, streamOptions, args.verbosity);
+    await runRepl(provider, streamOptions, args.verbosity, args.yes);
     return;
   }
 
@@ -425,7 +451,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    await runSingleShot(provider, prompt, streamOptions, mode, isOutputPiped, args.verbosity);
+    await runSingleShot(provider, prompt, streamOptions, mode, isOutputPiped, args.verbosity, args.yes);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(pc.red(`Error: ${message}`));
