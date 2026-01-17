@@ -50,6 +50,15 @@ export interface ServerConfig {
   autoConfirm?: boolean;  // Auto-confirm dangerous commands (use with caution)
 }
 
+// MCP Server configuration
+export interface MCPServerConfig {
+  command: string;           // Command to run (e.g., "npx", "python")
+  args?: string[];           // Arguments to pass
+  env?: Record<string, string>;  // Environment variables
+  cwd?: string;              // Working directory
+  description?: string;      // Human-readable description
+}
+
 export interface AIConfig {
   providers?: {
     default?: string;
@@ -62,6 +71,9 @@ export interface AIConfig {
   };
   server?: ServerConfig;
   fleet?: FleetConfig;
+  mcp?: {
+    servers?: Record<string, MCPServerConfig>;
+  };
   defaults?: {
     model?: string;
     verbosity?: 'quiet' | 'normal' | 'verbose';
@@ -218,6 +230,14 @@ export function getFleetTLSConfig(): FleetTLSConfig | undefined {
 export function getServerAutoConfirm(): boolean {
   const config = loadConfig();
   return config.server?.autoConfirm ?? false;
+}
+
+/**
+ * Get MCP servers configuration
+ */
+export function getMCPServersConfig(): Record<string, MCPServerConfig> {
+  const config = loadConfig();
+  return config.mcp?.servers || {};
 }
 
 export type Verbosity = 'quiet' | 'normal' | 'verbose';
@@ -411,6 +431,20 @@ export function createTemplateConfig(): void {
           url: "https://example.com:9443",
           description: "Example fleet node with mTLS",
           systemPrompt: "You are a helpful assistant on the example server."
+        }
+      }
+    },
+    mcp: {
+      servers: {
+        "filesystem": {
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-filesystem", "/home"],
+          description: "File system access via MCP"
+        },
+        "sqlite": {
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-sqlite", "~/data.db"],
+          description: "SQLite database access via MCP"
         }
       }
     },

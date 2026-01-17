@@ -412,6 +412,84 @@ Create `~/.config/ai/config.json` (or run `ai --config-init` to generate a templ
 | `fleet.tls.ca` | path | CA certificate for verifying server certs |
 | `fleet.tls.clientCert` | path | Client certificate for mTLS authentication |
 | `fleet.tls.clientKey` | path | Client private key for mTLS |
+| `mcp.servers.<name>.command` | string | Command to run the MCP server |
+| `mcp.servers.<name>.args` | array | Arguments to pass to the command |
+| `mcp.servers.<name>.env` | object | Environment variables for the server |
+| `mcp.servers.<name>.cwd` | string | Working directory for the server |
+
+## MCP (Model Context Protocol)
+
+AI CLI supports [MCP](https://modelcontextprotocol.io) servers, allowing you to extend the AI with additional tools from external sources—databases, APIs, custom integrations, and more.
+
+### What is MCP?
+
+MCP is a standard protocol that lets AI tools connect to external services. Think of it as "USB-C for AI"—a universal way to plug in capabilities. MCP servers can provide:
+
+- Database access (SQLite, PostgreSQL, etc.)
+- File system operations
+- API integrations (GitHub, Slack, etc.)
+- Custom tools for your specific workflows
+
+### Configuring MCP Servers
+
+Add MCP servers to your config file:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "filesystem": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"],
+        "description": "File system access via MCP"
+      },
+      "sqlite": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-sqlite", "~/data.db"],
+        "description": "SQLite database access"
+      },
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": {
+          "GITHUB_TOKEN": "your-token"
+        },
+        "description": "GitHub API access"
+      }
+    }
+  }
+}
+```
+
+### Using MCP Tools
+
+When MCP servers are configured, their tools are automatically loaded at startup:
+
+```bash
+$ ai "list my recent GitHub issues"
+Connecting to 1 MCP server(s)...
+Loaded 5 MCP tool(s)
+
+# The AI will use the mcp_github_list_issues tool automatically
+```
+
+MCP tools appear with the prefix `mcp_<server>_<tool>`:
+- `mcp_filesystem_read_file`
+- `mcp_sqlite_query`
+- `mcp_github_create_issue`
+
+### Popular MCP Servers
+
+| Server | Package | Description |
+|--------|---------|-------------|
+| Filesystem | `@modelcontextprotocol/server-filesystem` | Read/write files |
+| SQLite | `@modelcontextprotocol/server-sqlite` | Query SQLite databases |
+| PostgreSQL | `@modelcontextprotocol/server-postgres` | Query PostgreSQL |
+| GitHub | `@modelcontextprotocol/server-github` | GitHub API |
+| Slack | `@modelcontextprotocol/server-slack` | Slack integration |
+| Memory | `@modelcontextprotocol/server-memory` | Persistent memory |
+
+Find more at [github.com/modelcontextprotocol](https://github.com/modelcontextprotocol).
 
 ## CLI Options
 
@@ -495,6 +573,12 @@ src/
 │   ├── edit_file.ts  # File editing
 │   ├── fleet.ts      # Fleet query/upgrade tools
 │   └── version.ts    # Version and system info
+├── mcp/
+│   ├── index.ts      # MCP module exports
+│   ├── types.ts      # MCP protocol types
+│   ├── transport.ts  # stdio transport (spawn + stdin/stdout)
+│   ├── client.ts     # MCP client & manager
+│   └── tools.ts      # MCP tool wrappers
 └── utils/
     ├── stream.ts     # Streaming, thinking filter
     └── markdown.ts   # Terminal markdown rendering

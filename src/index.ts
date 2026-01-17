@@ -2,19 +2,20 @@
 import ora from 'ora';
 import pc from 'picocolors';
 import { Glob } from 'bun';
-import { parseArgs, printHelp, createTemplateConfig, getDefaultSystemPrompt, getServerTLSConfig, type Verbosity, type ServerTLSConfig } from './config';
+import { parseArgs, printHelp, createTemplateConfig, getDefaultSystemPrompt, getServerTLSConfig, getMCPServersConfig, type Verbosity, type ServerTLSConfig } from './config';
 import { getProvider, type StreamOptions, type Message, type Provider, type StreamChunk } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
 import { renderMarkdown } from './utils/markdown';
 import { appendHistory } from './history';
-import { getToolDefinitions, executeTool, type ToolCall } from './tools';
+import { getToolDefinitions, executeTool, registerTools, type ToolCall } from './tools';
 import { readline } from './utils/readline';
+import { initializeMCPTools, cleanupMCP } from './mcp';
 
 // Version is injected at build time via --define, falls back to package.json
 declare const __VERSION__: string;
 const VERSION = typeof __VERSION__ !== 'undefined' ? __VERSION__ : '0.1.0-dev';
 
-const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the user's system.
+const BASE_TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the user's system.
 
 Available tools:
 - bash: Execute shell commands (ls, cat, date, grep, curl, etc.)
@@ -24,8 +25,13 @@ Available tools:
 - version: Get your own version and system info
 - fleet_list: List all configured fleet nodes and their health
 - fleet_query: Query a remote fleet node (params: node, prompt)
-- fleet_broadcast: Send a prompt to ALL fleet nodes
+- fleet_broadcast: Send a prompt to ALL fleet nodes`;
 
+const MCP_TOOL_INSTRUCTIONS = `
+MCP tools are also available from connected MCP servers. These tools are prefixed with "mcp_<server>_".
+Use them when their descriptions match the user's needs.`;
+
+const TOOL_EXAMPLES = `
 Use tools proactively when they would help answer the user's question. For example:
 - "What time is it?" → Use bash with "date"
 - "What's in this directory?" → Use list_files or bash with "ls"
@@ -39,6 +45,21 @@ When a user mentions @nodename, use fleet_query to query that specific node.
 When a user mentions @all, use fleet_broadcast to query all nodes.
 
 Always try to use your tools to get real, accurate information rather than saying you can't help.`;
+
+/**
+ * Build the tool system prompt, optionally including MCP tools
+ */
+function getToolSystemPrompt(hasMCPTools: boolean = false): string {
+  let prompt = BASE_TOOL_SYSTEM_PROMPT;
+  if (hasMCPTools) {
+    prompt += MCP_TOOL_INSTRUCTIONS;
+  }
+  prompt += TOOL_EXAMPLES;
+  return prompt;
+}
+
+// Track whether MCP tools have been loaded
+let mcpToolsLoaded = false;
 
 /**
  * Build the full system prompt by combining:
@@ -62,7 +83,7 @@ function buildSystemPrompt(userSystemPrompt?: string, includeTools: boolean = tr
 
   // Add tool instructions
   if (includeTools) {
-    parts.push(TOOL_SYSTEM_PROMPT);
+    parts.push(getToolSystemPrompt(mcpToolsLoaded));
   }
 
   return parts.length > 0 ? parts.join('\n\n') : undefined;
@@ -598,6 +619,25 @@ async function main(): Promise<void> {
   const provider = getProvider({ model: args.model });
   const streamOptions: StreamOptions = {};
 
+  // Initialize MCP servers if configured
+  const mcpServers = getMCPServersConfig();
+  if (Object.keys(mcpServers).length > 0) {
+    console.error(pc.dim(`Connecting to ${Object.keys(mcpServers).length} MCP server(s)...`));
+    try {
+      const mcpTools = await initializeMCPTools(mcpServers);
+      if (mcpTools.length > 0) {
+        registerTools(mcpTools);
+        mcpToolsLoaded = true;
+        const toolNames = mcpTools.map(t => t.definition.name).join(', ');
+        console.error(pc.dim(`Loaded ${mcpTools.length} MCP tool(s): ${toolNames}\n`));
+      } else {
+        console.error(pc.dim(`MCP servers connected but no tools loaded\n`));
+      }
+    } catch (error) {
+      console.error(pc.yellow(`Warning: Failed to initialize MCP servers: ${error}`));
+    }
+  }
+
   if (args.systemPrompt) {
     streamOptions.systemPrompt = args.systemPrompt;
   }
@@ -704,11 +744,23 @@ async function main(): Promise<void> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(pc.red(`Error: ${message}`));
+    // Cleanup MCP before exiting
+    if (mcpToolsLoaded) {
+      await cleanupMCP();
+    }
     process.exit(1);
+  }
+
+  // Cleanup MCP connections
+  if (mcpToolsLoaded) {
+    await cleanupMCP();
   }
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error(pc.red(`Fatal error: ${error.message}`));
+  if (mcpToolsLoaded) {
+    await cleanupMCP();
+  }
   process.exit(1);
 });

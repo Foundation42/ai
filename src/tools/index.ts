@@ -35,6 +35,29 @@ export function getToolDefinitions(): ToolDefinition[] {
   return getAllTools().map(t => t.definition);
 }
 
+/**
+ * Register a new tool dynamically (e.g., MCP tools)
+ */
+export function registerTool(tool: Tool): void {
+  tools.set(tool.definition.name, tool);
+}
+
+/**
+ * Register multiple tools at once
+ */
+export function registerTools(newTools: Tool[]): void {
+  for (const tool of newTools) {
+    tools.set(tool.definition.name, tool);
+  }
+}
+
+/**
+ * Unregister a tool by name
+ */
+export function unregisterTool(name: string): boolean {
+  return tools.delete(name);
+}
+
 export async function executeTool(
   call: ToolCall,
   confirmFn?: (tool: Tool, args: Record<string, unknown>) => Promise<boolean>
