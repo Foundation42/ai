@@ -10,6 +10,8 @@
     "build:linux-arm": "bun build src/index.ts --compile --minify --target=bun-linux-arm64 --outfile ai-linux-arm"
   },
   "dependencies": {
+    "marked": "^17.0.1",
+    "marked-terminal": "^7.3.0",
     "ora": "^8.0.1",
     "picocolors": "^1.0.0"
   },

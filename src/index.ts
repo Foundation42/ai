@@ -4,6 +4,7 @@ import pc from 'picocolors';
 import { parseArgs, printHelp, loadEnvFile } from './config';
 import { getProvider, type StreamOptions, type Message, type Provider, type StreamChunk } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
+import { renderMarkdown } from './utils/markdown';
 import { appendHistory } from './history';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
 
@@ -33,7 +34,8 @@ async function streamResponse(
   provider: Provider,
   prompt: string,
   options: StreamOptions,
-  showSpinner: boolean
+  showSpinner: boolean,
+  useMarkdown: boolean = false
 ): Promise<StreamResult> {
   let spinner: ReturnType<typeof ora> | null = null;
   if (showSpinner) {
@@ -56,7 +58,10 @@ async function streamResponse(
     }
 
     if (chunk.type === 'text') {
-      process.stdout.write(chunk.content);
+      // If using markdown, buffer text; otherwise stream it
+      if (!useMarkdown) {
+        process.stdout.write(chunk.content);
+      }
       fullText += chunk.content;
     } else if (chunk.type === 'tool_call') {
       toolCalls.push(chunk.call);
@@ -69,7 +74,12 @@ async function streamResponse(
   }
 
   if (fullText) {
-    process.stdout.write('\n');
+    if (useMarkdown) {
+      // Render markdown and output
+      process.stdout.write(renderMarkdown(fullText));
+    } else {
+      process.stdout.write('\n');
+    }
   }
 
   return { text: fullText, toolCalls };
@@ -121,7 +131,7 @@ async function runSingleShot(
   while (loopCount < maxLoops) {
     loopCount++;
 
-    const { text, toolCalls } = await streamResponse(provider, prompt, streamOpts, !isOutputPiped);
+    const { text, toolCalls } = await streamResponse(provider, prompt, streamOpts, !isOutputPiped, !isOutputPiped);
 
     const assistantMsg: Message = { role: 'assistant', content: text };
     if (toolCalls.length > 0) {
@@ -270,6 +280,7 @@ async function runRepl(provider: Provider, options: StreamOptions): Promise<void
           provider,
           trimmed,
           streamOpts,
+          true,
           true
         );
 
