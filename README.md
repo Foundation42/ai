@@ -133,32 +133,121 @@ ai
 # Type 'clear' to reset context
 ```
 
-### Tool Execution
+### Local System Management
 
-The AI can use tools to interact with your system:
+Use AI to explore, monitor, and manage your local machine:
 
 ```bash
-# Check disk space (AI runs 'df -h')
-ai "What's my free disk space?" -y
+# System exploration
+ai "what's using the most disk space on this machine?"
+ai "show me the largest files in my home directory"
+ai "what services are currently running?"
+ai "which processes are using the most memory?"
 
-# Read and review a file
-ai "Review src/index.ts for bugs" -y
+# Monitoring and troubleshooting
+ai "is my system healthy? check CPU, memory, and disk"
+ai "why is my computer running slow right now?"
+ai "check if any disks are failing or have errors"
+ai "what happened in the system logs in the last hour?"
 
-# Edit a file (requires confirmation)
-ai "Fix the typo in README.md"
+# Finding things
+ai "find all PDF files I modified this week"
+ai "where is the nginx config file on this system?"
+ai "find TODO comments in this project"
+
+# System administration
+ai "add a new user called 'deploy' with sudo access"
+ai "set up a cron job to backup /data every night at 2am"
+ai "configure the firewall to allow port 443"
+ai "why won't my SSH connection to server1 work?"
 ```
 
-### Batch Processing
+### Working with Codebases
+
+AI CLI understands code and can help with development tasks:
 
 ```bash
-# Map: Process each file separately
-ls src/*.ts | ai --map "Describe this file" -y
+# Understanding code
+ai "explain what src/server.ts does"
+ai "how does authentication work in this codebase?"
+ai "find where errors are handled in this project"
+ai "what dependencies does this project have?"
 
-# Glob: Same but with pattern
-ai -g "src/**/*.ts" "Review this file" -y
+# Code review
+ai "review src/index.ts for bugs and security issues"
+ai "check this PR diff for problems" < pr.diff
+ai "are there any memory leaks in src/cache.ts?"
 
-# Reduce: Combine results
-ai -g "src/*.ts" "List exports" --reduce "Create a summary table" -y
+# Refactoring
+ai "suggest how to simplify the handleRequest function in src/server.ts"
+ai "find duplicate code in the src/ directory"
+ai "this function is too long, help me break it up" < src/bigfunction.ts
+
+# Documentation
+ai "write JSDoc comments for the functions in src/utils.ts"
+ai "generate a README for this project based on the code"
+ai "explain this regex and add a comment" < src/parser.ts
+
+# Debugging
+ai "this test is failing, help me understand why" < test-output.txt
+ai "what's causing this stack trace?" < error.log
+ai "find where this variable gets mutated"
+```
+
+### Map/Reduce Processing
+
+Process multiple items and optionally combine the results:
+
+**Map Mode** — Process each input separately:
+
+```bash
+# Process each line from stdin
+cat urls.txt | ai --map "check if this URL is accessible"
+
+# Process files matching a pattern (--glob implies --map)
+ai -g "src/**/*.ts" "list all exported functions in this file"
+ai -g "*.md" "summarize this document in one sentence"
+ai -g "test/*.test.ts" "does this test file have good coverage?"
+```
+
+**Reduce Mode** — Combine map results into a final output:
+
+```bash
+# Analyze all files, then create a summary
+ai -g "src/*.ts" "describe this file briefly" \
+   --reduce "create a table of all files and their purposes"
+
+# Find issues across files, then prioritize them
+ai -g "src/**/*.ts" "list any code smells or bugs" \
+   --reduce "rank these issues by severity and suggest which to fix first"
+
+# Gather metrics, then report
+ai -g "src/**/*.ts" "count lines of code and functions" \
+   --reduce "create a project statistics summary"
+```
+
+**Real-World Map/Reduce Examples:**
+
+```bash
+# Security audit across all config files
+ai -g "/etc/**/*.conf" "check for security issues" -y \
+   --reduce "create a security report with recommendations"
+
+# API documentation from source code
+ai -g "src/routes/*.ts" "extract API endpoints and their parameters" \
+   --reduce "generate OpenAPI documentation"
+
+# Dependency analysis
+ai -g "**/package.json" "list all dependencies" \
+   --reduce "find duplicate or conflicting versions"
+
+# Log analysis across multiple files
+ai -g "/var/log/*.log" "find errors and warnings from today" -y \
+   --reduce "correlate these events and identify root causes"
+
+# Codebase migration planning
+ai -g "src/**/*.js" "identify ES5 patterns that should be modernized" \
+   --reduce "create a migration plan prioritized by impact"
 ```
 
 ### DevOps Examples
