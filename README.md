@@ -159,6 +159,7 @@ ai "check the health of all production servers"
 - **Multiple Providers** — Google Gemini, Anthropic Claude, OpenAI, Mistral, DeepSeek, Ollama
 - **Three Modes** — Pipe, Standalone, and Interactive REPL
 - **Tool Execution** — AI can run bash commands, read/edit files, explore directories
+- **MCP Support** — Connect to local or remote MCP servers for extended capabilities
 - **Fleet Orchestration** — Query and manage remote servers with @ mentions
 - **Auto-Upgrade** — Fleet nodes upgrade themselves from GitHub releases
 - **mTLS Security** — Mutual TLS authentication for fleet communication
@@ -430,9 +431,36 @@ MCP is a standard protocol that lets AI tools connect to external services. Thin
 - API integrations (GitHub, Slack, etc.)
 - Custom tools for your specific workflows
 
-### Configuring MCP Servers
+### Adding MCP Servers Conversationally
 
-Add MCP servers to your config file:
+The easiest way to add an MCP server is to just ask:
+
+```bash
+# Add a remote MCP server
+ai "Connect to the MCP server at https://mcp.example.com/sse called myserver"
+
+# Add a local MCP server
+ai "Add an MCP server called sqlite using npx -y @modelcontextprotocol/server-sqlite ~/data.db"
+
+# List your MCP servers
+ai "What MCP servers do I have?"
+
+# Remove an MCP server
+ai "Remove the myserver MCP server"
+```
+
+### MCP Management Tools
+
+| Tool | Description |
+|------|-------------|
+| `mcp_add` | Add a new MCP server (local command or remote URL) |
+| `mcp_remove` | Remove an MCP server and unregister its tools |
+| `mcp_update` | Update an existing MCP server configuration |
+| `mcp_list` | List all configured MCP servers and their status |
+
+### Configuring MCP Servers via Config File
+
+You can also add MCP servers directly in your config file:
 
 ```json
 {
@@ -448,35 +476,37 @@ Add MCP servers to your config file:
         "args": ["-y", "@modelcontextprotocol/server-sqlite", "~/data.db"],
         "description": "SQLite database access"
       },
-      "github": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-github"],
-        "env": {
-          "GITHUB_TOKEN": "your-token"
-        },
-        "description": "GitHub API access"
+      "remote-api": {
+        "url": "https://mcp.example.com/sse",
+        "description": "Remote MCP server via HTTP/SSE"
       }
     }
   }
 }
 ```
 
+### Local vs Remote MCP Servers
+
+AI CLI supports both local and remote MCP servers:
+
+| Type | Config | Transport |
+|------|--------|-----------|
+| **Local** | `command` + `args` | stdio (stdin/stdout) |
+| **Remote** | `url` | HTTP/SSE (Streamable HTTP) |
+
+Remote servers are great for shared services, cloud-hosted tools, or connecting to MCP servers you don't want to run locally.
+
 ### Using MCP Tools
 
-When MCP servers are configured, their tools are automatically loaded at startup:
+When MCP servers are configured, their tools are automatically loaded at startup. MCP tools appear with the prefix `mcp_<server>_<tool>`:
 
 ```bash
-$ ai "list my recent GitHub issues"
-Connecting to 1 MCP server(s)...
-Loaded 5 MCP tool(s)
+ai "list my recent GitHub issues"
+# Uses mcp_github_list_issues automatically
 
-# The AI will use the mcp_github_list_issues tool automatically
+ai "query the users table"
+# Uses mcp_sqlite_query automatically
 ```
-
-MCP tools appear with the prefix `mcp_<server>_<tool>`:
-- `mcp_filesystem_read_file`
-- `mcp_sqlite_query`
-- `mcp_github_create_issue`
 
 ### Popular MCP Servers
 
@@ -565,20 +595,22 @@ src/
 │   ├── deepseek.ts   # DeepSeek
 │   └── ollama.ts     # Local Ollama
 ├── tools/
-│   ├── index.ts      # Tool registry
-│   ├── types.ts      # Tool interface
-│   ├── bash.ts       # Shell execution
-│   ├── read_file.ts  # File reading
-│   ├── list_files.ts # Directory listing
-│   ├── edit_file.ts  # File editing
-│   ├── fleet.ts      # Fleet query/upgrade tools
-│   └── version.ts    # Version and system info
+│   ├── index.ts       # Tool registry
+│   ├── types.ts       # Tool interface
+│   ├── bash.ts        # Shell execution
+│   ├── read_file.ts   # File reading
+│   ├── list_files.ts  # Directory listing
+│   ├── edit_file.ts   # File editing
+│   ├── fleet.ts       # Fleet query/upgrade tools
+│   ├── mcp_manage.ts  # MCP add/remove/update/list
+│   └── version.ts     # Version and system info
 ├── mcp/
-│   ├── index.ts      # MCP module exports
-│   ├── types.ts      # MCP protocol types
-│   ├── transport.ts  # stdio transport (spawn + stdin/stdout)
-│   ├── client.ts     # MCP client & manager
-│   └── tools.ts      # MCP tool wrappers
+│   ├── index.ts          # MCP module exports
+│   ├── types.ts          # MCP protocol types
+│   ├── transport.ts      # stdio transport (local servers)
+│   ├── http-transport.ts # HTTP/SSE transport (remote servers)
+│   ├── client.ts         # MCP client & manager
+│   └── tools.ts          # MCP tool wrappers
 └── utils/
     ├── stream.ts     # Streaming, thinking filter
     └── markdown.ts   # Terminal markdown rendering
