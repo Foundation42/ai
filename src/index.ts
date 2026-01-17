@@ -11,6 +11,22 @@ import { getToolDefinitions, executeTool, type ToolCall } from './tools';
 
 const VERSION = '0.1.0';
 
+const TOOL_SYSTEM_PROMPT = `You are a helpful AI assistant with access to tools that let you interact with the user's system.
+
+Available tools:
+- bash: Execute shell commands (ls, cat, date, grep, curl, etc.)
+- read_file: Read file contents
+- list_files: List directory contents
+- edit_file: Make targeted edits to files
+
+Use tools proactively when they would help answer the user's question. For example:
+- "What time is it?" → Use bash with "date"
+- "What's in this directory?" → Use list_files or bash with "ls"
+- "Show me the contents of config.json" → Use read_file
+- "What's my IP address?" → Use bash with "curl ifconfig.me" or similar
+
+Always try to use your tools to get real, accurate information rather than saying you can't help.`;
+
 type Mode = 'pipe' | 'standalone' | 'repl';
 
 function detectMode(hasPrompt: boolean): { mode: Mode; isOutputPiped: boolean } {
@@ -155,8 +171,10 @@ async function runSingleShot(
   const useTools = provider.supportsTools;
   const messages: Message[] = [];
 
-  if (options.systemPrompt) {
-    messages.push({ role: 'system', content: options.systemPrompt });
+  // Add system prompt: user-provided takes priority, otherwise use tool prompt if tools available
+  const systemPrompt = options.systemPrompt || (useTools ? TOOL_SYSTEM_PROMPT : undefined);
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
   }
   messages.push({ role: 'user', content: prompt });
 
@@ -233,9 +251,10 @@ async function runRepl(provider: Provider, options: StreamOptions, verbosity: Ve
   const messages: Message[] = [];
   const useTools = provider.supportsTools;
 
-  // Add system prompt if provided
-  if (options.systemPrompt) {
-    messages.push({ role: 'system', content: options.systemPrompt });
+  // Add system prompt: user-provided takes priority, otherwise use tool prompt if tools available
+  const systemPrompt = options.systemPrompt || (useTools ? TOOL_SYSTEM_PROMPT : undefined);
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
   }
 
   console.log(pc.cyan(`AI REPL (${provider.name}:${options.model || provider.defaultModel})`));
@@ -301,8 +320,8 @@ async function runRepl(provider: Provider, options: StreamOptions, verbosity: Ve
 
     if (trimmed.toLowerCase() === 'clear') {
       messages.length = 0;
-      if (options.systemPrompt) {
-        messages.push({ role: 'system', content: options.systemPrompt });
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
       }
       console.log(pc.dim('Context cleared.\n'));
       continue;
