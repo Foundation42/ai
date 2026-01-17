@@ -5,6 +5,7 @@ import { ListFilesTool } from './list_files';
 import { EditFileTool } from './edit_file';
 import { FleetQueryTool, FleetListTool, FleetBroadcastTool, FleetUpgradeTool } from './fleet';
 import { VersionTool } from './version';
+import { MCPAddTool, MCPRemoveTool, MCPUpdateTool, MCPListTool } from './mcp_manage';
 
 export type { Tool, ToolDefinition, ToolCall, ToolResult } from './types';
 
@@ -22,6 +23,12 @@ tools.set('fleet_query', new FleetQueryTool());
 tools.set('fleet_list', new FleetListTool());
 tools.set('fleet_broadcast', new FleetBroadcastTool());
 tools.set('fleet_upgrade', new FleetUpgradeTool());
+
+// Register MCP management tools
+tools.set('mcp_add', new MCPAddTool());
+tools.set('mcp_remove', new MCPRemoveTool());
+tools.set('mcp_update', new MCPUpdateTool());
+tools.set('mcp_list', new MCPListTool());
 
 export function getTool(name: string): Tool | undefined {
   return tools.get(name);

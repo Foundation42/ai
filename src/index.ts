@@ -25,7 +25,12 @@ Available tools:
 - version: Get your own version and system info
 - fleet_list: List all configured fleet nodes and their health
 - fleet_query: Query a remote fleet node (params: node, prompt)
-- fleet_broadcast: Send a prompt to ALL fleet nodes`;
+- fleet_broadcast: Send a prompt to ALL fleet nodes
+- fleet_upgrade: Upgrade fleet nodes to latest version
+- mcp_add: Add a new MCP server (params: name, url or command, description)
+- mcp_remove: Remove an MCP server by name
+- mcp_update: Update an existing MCP server configuration
+- mcp_list: List all configured MCP servers and their status`;
 
 const MCP_TOOL_INSTRUCTIONS = `
 MCP tools are also available from connected MCP servers. These tools are prefixed with "mcp_<server>_".
@@ -40,6 +45,8 @@ Use tools proactively when they would help answer the user's question. For examp
 - "What version are you running?" → Use version tool
 - "Check disk space on server1" → Use fleet_query with node="server1"
 - "What's the status of all servers?" → Use fleet_broadcast
+- "Connect to the MCP server at https://..." → Use mcp_add with url
+- "What MCP servers do I have?" → Use mcp_list
 
 When a user mentions @nodename, use fleet_query to query that specific node.
 When a user mentions @all, use fleet_broadcast to query all nodes.
