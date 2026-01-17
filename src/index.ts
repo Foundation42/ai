@@ -559,6 +559,13 @@ async function main(): Promise<void> {
 
   await loadEnvFile();
 
+  // Server mode
+  if (args.server) {
+    const { startServer } = await import('./server');
+    await startServer({ port: args.port, token: args.token });
+    return;
+  }
+
   const hasPrompt = args.prompt.length > 0;
   const { mode, isOutputPiped } = detectMode(hasPrompt);
 

@@ -46,6 +46,9 @@ export interface CLIArgs {
   map: boolean;
   reduce?: string;
   glob?: string;
+  server: boolean;
+  port: number;
+  token?: string;
 }
 
 export function parseArgs(args: string[]): CLIArgs {
@@ -56,6 +59,8 @@ export function parseArgs(args: string[]): CLIArgs {
     verbosity: 'normal',
     yes: false,
     map: false,
+    server: false,
+    port: 8080,
   };
 
   let i = 0;
@@ -83,6 +88,12 @@ export function parseArgs(args: string[]): CLIArgs {
     } else if (arg === '--glob' || arg === '-g') {
       result.glob = args[++i];
       result.map = true; // --glob implies --map
+    } else if (arg === '--server') {
+      result.server = true;
+    } else if (arg === '--port' || arg === '-p') {
+      result.port = parseInt(args[++i] || '8080', 10);
+    } else if (arg === '--token') {
+      result.token = args[++i];
     } else if (!arg.startsWith('-')) {
       result.prompt.push(arg);
     }
@@ -112,6 +123,11 @@ Options:
   -g, --glob <pattern>          Expand glob pattern and process each file (implies --map)
   -h, --help                    Show this help message
   -V, --version                 Show version
+
+Server Mode:
+  --server                      Start as HTTP server (OpenAI-compatible API)
+  -p, --port <port>             Server port (default: 8080)
+  --token <token>               Bearer token for auth (or set AI_SERVER_TOKEN)
 
 Providers:
   google      Google Gemini API (requires GOOGLE_API_KEY)

@@ -191,6 +191,49 @@ src/
     └── markdown.ts   # Terminal markdown rendering
 ```
 
+## Server Mode
+
+Run as an OpenAI-compatible API server with fleet management capabilities:
+
+```bash
+# Start server (generates token if not provided)
+ai --server
+
+# With custom port and token
+ai --server --port 8080 --token mysecret
+
+# Or use environment variable
+AI_SERVER_TOKEN=mysecret ai --server
+```
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/chat/completions` | POST | OpenAI-compatible chat API |
+| `/v1/models` | GET | List available models |
+| `/v1/fleet/execute` | POST | Execute prompt with tools |
+| `/v1/fleet/health` | GET | Node health info (no auth) |
+
+### Examples
+
+```bash
+# Chat completion (OpenAI-compatible)
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "google:gemini-2.0-flash", "messages": [{"role": "user", "content": "Hello"}]}'
+
+# Fleet execute (runs tools on the server)
+curl -X POST http://localhost:8080/v1/fleet/execute \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What is the disk usage on this machine?"}'
+
+# Health check (no auth required)
+curl http://localhost:8080/v1/fleet/health
+```
+
 ## License
 
 MIT
