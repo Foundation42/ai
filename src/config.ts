@@ -85,11 +85,67 @@ export interface MemoryTTLConfig {
   };
 }
 
+// Event hook types
+export type EventType =
+  | 'disk_usage'      // Disk usage exceeds threshold
+  | 'memory_usage'    // Memory usage exceeds threshold
+  | 'load_average'    // System load exceeds threshold
+  | 'service_down'    // systemd service is not running
+  | 'service_up'      // systemd service started running
+  | 'file_exists'     // File appears
+  | 'file_missing'    // File disappears
+  | 'file_changed'    // File modification time changed
+  | 'command_fails'   // Command exits with non-zero
+  | 'command_succeeds'// Command exits with zero
+  | 'command_output'  // Command output matches pattern
+  | 'http_down'       // HTTP endpoint returns error
+  | 'http_up'         // HTTP endpoint becomes available
+  | 'port_open'       // TCP port is open
+  | 'port_closed';    // TCP port is closed
+
+export interface EventCondition {
+  type: EventType;
+  // For disk_usage, memory_usage, load_average
+  threshold?: number;           // e.g., 0.9 for 90%
+  // For disk_usage
+  path?: string;                // Mount point to check (default: /)
+  // For service_down/service_up
+  service?: string;             // systemd service name
+  // For file_exists/file_missing/file_changed
+  file?: string;                // File path to check
+  // For command_* events
+  command?: string;             // Command to run
+  pattern?: string;             // Regex pattern for command_output
+  // For http_down/http_up
+  url?: string;                 // URL to check
+  expectedStatus?: number;      // Expected HTTP status (default: 200)
+  // For port_open/port_closed
+  host?: string;                // Host to check (default: localhost)
+  port?: number;                // Port number
+}
+
+export interface EventHook {
+  name: string;                 // Unique identifier
+  enabled?: boolean;            // Default: true
+  event: EventCondition;        // What to watch for
+  prompt: string;               // Prompt to execute when triggered
+  cooldown?: number;            // Minimum time between triggers in ms (default: 300000 = 5 min)
+  notifyPeers?: boolean;        // Send alert to peer nodes
+  peerPrompt?: string;          // Custom prompt for peer notification
+}
+
+export interface EventHooksConfig {
+  enabled?: boolean;            // Master switch (default: false)
+  checkInterval?: number;       // How often to check conditions in ms (default: 30000 = 30s)
+  hooks?: EventHook[];          // List of event hooks
+}
+
 export interface SchedulerConfig {
   enabled?: boolean;         // Master switch (default: false)
   tasks?: ScheduledTask[];   // List of scheduled tasks
   knowledgeSync?: KnowledgeSyncConfig;  // Automatic knowledge sync config
   memoryTTL?: MemoryTTLConfig;          // Memory expiry and cleanup config
+  eventHooks?: EventHooksConfig;        // Event-driven triggers
 }
 
 export interface ServerConfig {
@@ -335,6 +391,14 @@ export function getMemoryTTLConfig(): MemoryTTLConfig & { defaultTTL: Required<M
 }
 
 /**
+ * Get event hooks configuration
+ */
+export function getEventHooksConfig(): EventHooksConfig {
+  const config = loadConfig();
+  return config.server?.scheduler?.eventHooks || { enabled: false, hooks: [] };
+}
+
+/**
  * Get MCP servers configuration
  */
 export function getMCPServersConfig(): Record<string, MCPServerConfig> {
@@ -554,6 +618,32 @@ export function createTemplateConfig(): void {
             observation: 604800000, // 7 days
             note: 1209600000       // 14 days
           }
+        },
+        eventHooks: {
+          enabled: true,           // Enable event-driven triggers
+          checkInterval: 30000,    // Check conditions every 30 seconds
+          hooks: [
+            {
+              name: "disk-alert",
+              event: { type: "disk_usage", threshold: 0.9, path: "/" },
+              prompt: "Disk usage is critical! Find large files and suggest cleanup",
+              cooldown: 3600000,   // 1 hour cooldown
+              notifyPeers: true,
+              peerPrompt: "My disk is nearly full - heads up!"
+            },
+            {
+              name: "nginx-down",
+              event: { type: "service_down", service: "nginx" },
+              prompt: "Nginx is down! Check status and try to restart it",
+              cooldown: 300000     // 5 minute cooldown
+            },
+            {
+              name: "api-health",
+              event: { type: "http_down", url: "http://localhost:3000/health" },
+              prompt: "API health check failed! Investigate and report status",
+              cooldown: 60000      // 1 minute cooldown
+            }
+          ]
         }
       },
       tls: {

@@ -1482,6 +1482,168 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/v1/scheduler | jq '
 }
 ```
 
+## Event Hooks
+
+Fleet nodes can react to system events with configurable hooks. When a condition is met, the node executes a prompt and optionally notifies peers.
+
+### Event Types
+
+| Event Type | Triggers When | Parameters |
+|------------|---------------|------------|
+| `disk_usage` | Disk usage exceeds threshold | `threshold`, `path` |
+| `memory_usage` | Memory usage exceeds threshold | `threshold` |
+| `load_average` | System load exceeds threshold | `threshold` |
+| `service_down` | systemd service stops | `service` |
+| `service_up` | systemd service starts | `service` |
+| `file_exists` | File appears | `file` |
+| `file_missing` | File disappears | `file` |
+| `file_changed` | File modification time changes | `file` |
+| `command_fails` | Command exits non-zero | `command` |
+| `command_succeeds` | Command exits zero | `command` |
+| `command_output` | Command output matches pattern | `command`, `pattern` |
+| `http_down` | HTTP endpoint returns error | `url`, `expectedStatus` |
+| `http_up` | HTTP endpoint becomes available | `url`, `expectedStatus` |
+| `port_open` | TCP port opens | `host`, `port` |
+| `port_closed` | TCP port closes | `host`, `port` |
+
+### Configuration
+
+```json
+{
+  "server": {
+    "scheduler": {
+      "enabled": true,
+      "eventHooks": {
+        "enabled": true,
+        "checkInterval": 30000,
+        "hooks": [
+          {
+            "name": "disk-alert",
+            "event": { "type": "disk_usage", "threshold": 0.9, "path": "/" },
+            "prompt": "Disk usage is critical! Find large files and suggest cleanup",
+            "cooldown": 3600000,
+            "notifyPeers": true,
+            "peerPrompt": "My disk is nearly full - heads up!"
+          },
+          {
+            "name": "nginx-down",
+            "event": { "type": "service_down", "service": "nginx" },
+            "prompt": "Nginx is down! Check status and try to restart it",
+            "cooldown": 300000
+          },
+          {
+            "name": "api-health",
+            "event": { "type": "http_down", "url": "http://localhost:3000/health" },
+            "prompt": "API health check failed! Investigate and report status",
+            "cooldown": 60000
+          },
+          {
+            "name": "deploy-trigger",
+            "event": { "type": "file_exists", "file": "/tmp/deploy.flag" },
+            "prompt": "Deploy flag detected! Pull latest code and restart services",
+            "cooldown": 300000
+          },
+          {
+            "name": "backup-check",
+            "event": { "type": "command_fails", "command": "test -f /backup/latest.tar.gz" },
+            "prompt": "Backup file missing! Check backup job status",
+            "cooldown": 86400000
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+### Hook Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `name` | required | Unique hook identifier |
+| `enabled` | `true` | Enable/disable the hook |
+| `event` | required | Event condition to monitor |
+| `prompt` | required | Prompt to execute when triggered |
+| `cooldown` | `300000` | Minimum time between triggers (ms) |
+| `notifyPeers` | `false` | Alert peer nodes when triggered |
+| `peerPrompt` | auto | Custom message for peer notification |
+
+### Edge Detection
+
+Many events use edge detection to only trigger on state transitions:
+- `service_down` triggers once when service stops (not every check while stopped)
+- `file_exists` triggers once when file appears (not every check while present)
+- `http_down` triggers once when endpoint fails (not every check while down)
+
+This prevents alert storms and allows meaningful cooldown periods.
+
+### Event Hook Statistics
+
+Check hook status via the scheduler API:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:9090/v1/scheduler | jq '.eventHooks'
+```
+
+```json
+{
+  "enabled": true,
+  "hooks": [
+    {
+      "name": "disk-alert",
+      "eventType": "disk_usage",
+      "triggerCount": 3,
+      "lastTriggered": "2025-01-17T12:00:00Z",
+      "inCooldown": true,
+      "cooldownRemaining": 1800000
+    }
+  ]
+}
+```
+
+### Use Cases
+
+**Self-Healing Infrastructure:**
+```json
+{
+  "name": "auto-restart-nginx",
+  "event": { "type": "service_down", "service": "nginx" },
+  "prompt": "Nginx crashed! Check logs, fix any issues, and restart the service",
+  "cooldown": 60000
+}
+```
+
+**Disk Space Management:**
+```json
+{
+  "name": "disk-cleanup",
+  "event": { "type": "disk_usage", "threshold": 0.85, "path": "/" },
+  "prompt": "Disk is getting full. Find and delete old logs, temp files, and caches",
+  "cooldown": 3600000
+}
+```
+
+**Deployment Triggers:**
+```json
+{
+  "name": "git-deploy",
+  "event": { "type": "file_changed", "file": "/var/repo/.git/FETCH_HEAD" },
+  "prompt": "Repository updated! Run tests and deploy if passing",
+  "cooldown": 300000
+}
+```
+
+**Health Monitoring:**
+```json
+{
+  "name": "database-health",
+  "event": { "type": "command_fails", "command": "pg_isready" },
+  "prompt": "PostgreSQL not responding! Check status, logs, and try to recover",
+  "cooldown": 120000,
+  "notifyPeers": true
+}
+```
+
 ## systemd Integration
 
 For production deployments, run fleet nodes as systemd services:

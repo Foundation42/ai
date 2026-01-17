@@ -2,7 +2,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import pc from 'picocolors';
-import { getSchedulerConfig, getKnowledgeSyncConfig, getMemoryTTLConfig, ensureConfigDir, type ScheduledTask, type KnowledgeSyncConfig } from './config';
+import { getSchedulerConfig, getKnowledgeSyncConfig, getMemoryTTLConfig, getEventHooksConfig, ensureConfigDir, type ScheduledTask, type KnowledgeSyncConfig, type EventHook } from './config';
 import { loadFleetConfig, queryFleetNode, type FleetNode } from './fleet';
 import { getProvider, type StreamOptions, type Message } from './providers';
 import { getToolDefinitions, executeTool, type ToolCall } from './tools';
@@ -17,6 +17,13 @@ import {
   getMemoryStats,
   type Memory,
 } from './memory';
+import {
+  loadEventState,
+  saveEventState,
+  checkEventCondition,
+  isInCooldown,
+  getEventHooksStats,
+} from './events';
 
 const STATE_PATH = join(homedir(), '.config', 'ai', 'scheduler-state.json');
 const HANDOFF_STATE_PATH = join(homedir(), '.config', 'ai', 'handoff-state.json');
@@ -28,6 +35,7 @@ const serverConfirmFn = async () => getServerAutoConfirm();
 let schedulerTimer: Timer | null = null;
 let knowledgeSyncTimer: Timer | null = null;
 let memoryCleanupTimer: Timer | null = null;
+let eventHooksTimer: Timer | null = null;
 
 // ============================================
 // Round-Robin Handoff State
@@ -524,6 +532,9 @@ export function startScheduler(): void {
 
   // Also start memory cleanup if enabled
   startMemoryCleanup();
+
+  // Also start event hooks if enabled
+  startEventHooks();
 }
 
 /**
@@ -541,6 +552,10 @@ export function stopScheduler(): void {
   if (memoryCleanupTimer) {
     clearInterval(memoryCleanupTimer);
     memoryCleanupTimer = null;
+  }
+  if (eventHooksTimer) {
+    clearInterval(eventHooksTimer);
+    eventHooksTimer = null;
   }
 }
 
@@ -720,6 +735,145 @@ export function startMemoryCleanup(): void {
   memoryCleanupTimer = setInterval(memoryCleanupTick, interval);
 }
 
+// ============================================
+// Event Hooks
+// ============================================
+
+/**
+ * Execute an event hook's prompt
+ */
+async function executeEventHook(hook: EventHook, message: string): Promise<void> {
+  console.log(pc.yellow(`\n[Event Hook] ${hook.name}: ${message}`));
+
+  // Execute the hook's prompt
+  const result = await executePromptLocally(hook.prompt);
+
+  if (result.success) {
+    console.log(pc.green(`   Action completed`));
+    if (result.response) {
+      const preview = result.response.slice(0, 200).replace(/\n/g, ' ');
+      console.log(pc.dim(`   Response: ${preview}${result.response.length > 200 ? '...' : ''}`));
+    }
+  } else {
+    console.log(pc.red(`   Action failed: ${result.response}`));
+  }
+
+  // Notify peers if configured
+  if (hook.notifyPeers) {
+    const fleetConfig = loadFleetConfig();
+    const fleetTLS = getFleetTLSConfig();
+    const peerPrompt = hook.peerPrompt || `Alert from peer: ${message}`;
+
+    for (const peer of fleetConfig.nodes) {
+      console.log(pc.dim(`   Notifying ${peer.name}...`));
+      await queryFleetNode(peer, peerPrompt, { fleetTLS });
+    }
+  }
+}
+
+/**
+ * Run event hooks check tick
+ */
+async function eventHooksTick(): Promise<void> {
+  const config = getEventHooksConfig();
+
+  if (!config.enabled || !config.hooks?.length) {
+    return;
+  }
+
+  const eventState = loadEventState();
+  const now = Date.now();
+
+  for (const hook of config.hooks) {
+    if (hook.enabled === false) {
+      continue;
+    }
+
+    // Initialize hook state if needed
+    if (!eventState.hooks[hook.name]) {
+      eventState.hooks[hook.name] = { triggerCount: 0 };
+    }
+
+    const hookState = eventState.hooks[hook.name];
+
+    // Skip if in cooldown
+    if (isInCooldown(hook, eventState)) {
+      continue;
+    }
+
+    try {
+      // Check the event condition
+      const result = await checkEventCondition(
+        hook.event,
+        hookState.lastValue,
+        hookState.lastStatus
+      );
+
+      // Update state with current check
+      hookState.lastChecked = now;
+
+      // Store current status for edge detection
+      if (typeof result.value === 'number') {
+        hookState.lastValue = result.value;
+        hookState.lastStatus = result.triggered;
+      }
+
+      // Execute hook if triggered
+      if (result.triggered && result.message) {
+        hookState.lastTriggered = now;
+        hookState.triggerCount++;
+        saveEventState(eventState);
+
+        await executeEventHook(hook, result.message);
+      }
+    } catch (err) {
+      console.error(pc.dim(`Event hook ${hook.name} check failed: ${err}`));
+    }
+  }
+
+  // Save state periodically
+  saveEventState(eventState);
+}
+
+/**
+ * Start event hooks monitoring
+ */
+export function startEventHooks(): void {
+  // Prevent double-start
+  if (eventHooksTimer) {
+    return;
+  }
+
+  const config = getEventHooksConfig();
+
+  if (!config.enabled) {
+    return;
+  }
+
+  const hookCount = config.hooks?.length || 0;
+  if (hookCount === 0) {
+    console.log(pc.dim(`   Event hooks enabled but no hooks configured`));
+    return;
+  }
+
+  const interval = config.checkInterval || 30000; // Default 30 seconds
+
+  console.log(pc.dim(`   Event hooks enabled (${hookCount} hook${hookCount > 1 ? 's' : ''}, check every ${interval / 1000}s)`));
+
+  // List hooks
+  for (const hook of config.hooks || []) {
+    if (hook.enabled !== false) {
+      console.log(pc.dim(`     - ${hook.name}: ${hook.event.type}`));
+    }
+  }
+
+  // Run initial check after 25s delay
+  setTimeout(eventHooksTick, 25000);
+
+  // Then check at configured interval
+  eventHooksTimer = setInterval(eventHooksTick, interval);
+}
+
 /**
  * Get handoff stats for API
  */
@@ -766,6 +920,7 @@ export function getSchedulerStatus(): {
   handoff: ReturnType<typeof getHandoffStats>;
   knowledgeSync: ReturnType<typeof getSyncStats>;
   memory: ReturnType<typeof getMemoryStats>;
+  eventHooks: ReturnType<typeof getEventHooksStats>;
 } {
   const config = getSchedulerConfig();
   const state = loadSchedulerState();
@@ -791,5 +946,6 @@ export function getSchedulerStatus(): {
     handoff: getHandoffStats(),
     knowledgeSync: getSyncStats(),
     memory: getMemoryStats(),
+    eventHooks: getEventHooksStats(),
   };
 }
