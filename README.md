@@ -186,7 +186,7 @@ ai "check the health of all production servers"
 
 ## Installation
 
-**Quick install (Linux):**
+**Quick install (Linux/macOS):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Foundation42/ai/main/install.sh | bash
@@ -194,14 +194,19 @@ curl -fsSL https://raw.githubusercontent.com/Foundation42/ai/main/install.sh | b
 
 Then just run `ai` — it will guide you through setup on first run!
 
+**Windows:**
+
+Download `ai-windows-x64.exe` from [releases](https://github.com/Foundation42/ai/releases), rename to `ai.exe`, and add to your PATH.
+
 **Manual install:**
 
 ```bash
-# Download binary
+# Download binary (replace with your platform)
+# Options: ai-linux-x64, ai-linux-arm64, ai-macos-x64, ai-macos-arm64
 curl -sL https://github.com/Foundation42/ai/releases/latest/download/ai-linux-x64 \
   -o ~/.local/bin/ai && chmod +x ~/.local/bin/ai
 
-# Or build from source
+# Or build from source (requires Bun)
 git clone https://github.com/Foundation42/ai.git
 cd ai
 bun install
