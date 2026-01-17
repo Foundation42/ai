@@ -287,8 +287,6 @@ export async function performUpgrade(
 
       // Script waits for old process to exit, then starts new binary with same args
       const script = `#!/bin/bash
-# Clean up this script
-rm -f "${restartScript}"
 
 # Wait for old process to exit (max 30 seconds)
 for i in {1..30}; do
@@ -301,8 +299,11 @@ done
 # Small delay to ensure port is released
 sleep 1
 
-# Start new process
-exec ${currentPath} ${args}
+# Start new process with nohup to ensure it survives
+nohup ${currentPath} ${args} > /var/log/ai.log 2>&1 &
+
+# Clean up this script
+rm -f "${restartScript}"
 `;
 
       writeFileSync(restartScript, script, { mode: 0o755 });
