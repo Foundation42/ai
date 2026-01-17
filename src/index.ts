@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import ora from 'ora';
 import pc from 'picocolors';
-import { parseArgs, printHelp, loadEnvFile } from './config';
+import { parseArgs, printHelp, loadEnvFile, type Verbosity } from './config';
 import { getProvider, type StreamOptions, type Message, type Provider, type StreamChunk } from './providers';
 import { readStdin, filterThinking } from './utils/stream';
 import { renderMarkdown } from './utils/markdown';
@@ -108,7 +108,8 @@ async function runSingleShot(
   prompt: string,
   options: StreamOptions,
   mode: Mode,
-  isOutputPiped: boolean
+  isOutputPiped: boolean,
+  verbosity: Verbosity
 ): Promise<void> {
   const useTools = provider.supportsTools;
   const messages: Message[] = [];
@@ -146,7 +147,9 @@ async function runSingleShot(
 
     // Execute tool calls
     for (const call of toolCalls) {
-      console.error(pc.dim(`\n🔧 ${call.name}: ${JSON.stringify(call.arguments)}`));
+      if (verbosity !== 'quiet') {
+        console.error(pc.dim(`\n🔧 ${call.name}: ${JSON.stringify(call.arguments)}`));
+      }
 
       const result = await executeTool(call, async (tool, args) => {
         if (tool.requiresConfirmation?.(args)) {
@@ -155,10 +158,12 @@ async function runSingleShot(
         return true;
       });
 
-      if (result.error) {
-        console.error(pc.red(result.result));
-      } else {
-        console.error(pc.dim(result.result.slice(0, 500) + (result.result.length > 500 ? '...' : '')));
+      if (verbosity === 'verbose') {
+        if (result.error) {
+          console.error(pc.red(result.result));
+        } else {
+          console.error(pc.dim(result.result.slice(0, 500) + (result.result.length > 500 ? '...' : '')));
+        }
       }
 
       messages.push({
@@ -168,7 +173,9 @@ async function runSingleShot(
       });
     }
 
-    console.error();
+    if (verbosity !== 'quiet') {
+      console.error();
+    }
   }
 
   await appendHistory({
@@ -181,7 +188,7 @@ async function runSingleShot(
   });
 }
 
-async function runRepl(provider: Provider, options: StreamOptions): Promise<void> {
+async function runRepl(provider: Provider, options: StreamOptions, verbosity: Verbosity): Promise<void> {
   const messages: Message[] = [];
   const useTools = provider.supportsTools;
 
@@ -307,7 +314,9 @@ async function runRepl(provider: Provider, options: StreamOptions): Promise<void
 
         // Execute tool calls
         for (const call of toolCalls) {
-          console.log(pc.dim(`\n🔧 ${call.name}: ${JSON.stringify(call.arguments)}`));
+          if (verbosity !== 'quiet') {
+            console.log(pc.dim(`\n🔧 ${call.name}: ${JSON.stringify(call.arguments)}`));
+          }
 
           const result = await executeTool(call, async (tool, args) => {
             if (tool.requiresConfirmation?.(args)) {
@@ -316,11 +325,12 @@ async function runRepl(provider: Provider, options: StreamOptions): Promise<void
             return true;
           });
 
-          // Show result
-          if (result.error) {
-            console.log(pc.red(result.result));
-          } else {
-            console.log(pc.dim(result.result.slice(0, 500) + (result.result.length > 500 ? '...' : '')));
+          if (verbosity === 'verbose') {
+            if (result.error) {
+              console.log(pc.red(result.result));
+            } else {
+              console.log(pc.dim(result.result.slice(0, 500) + (result.result.length > 500 ? '...' : '')));
+            }
           }
 
           // Add tool result to messages
@@ -331,7 +341,9 @@ async function runRepl(provider: Provider, options: StreamOptions): Promise<void
           });
         }
 
-        console.log();
+        if (verbosity !== 'quiet') {
+          console.log();
+        }
       }
 
       console.log();
@@ -375,7 +387,7 @@ async function main(): Promise<void> {
   }
 
   if (mode === 'repl') {
-    await runRepl(provider, streamOptions);
+    await runRepl(provider, streamOptions, args.verbosity);
     return;
   }
 
@@ -398,7 +410,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    await runSingleShot(provider, prompt, streamOptions, mode, isOutputPiped);
+    await runSingleShot(provider, prompt, streamOptions, mode, isOutputPiped, args.verbosity);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(pc.red(`Error: ${message}`));

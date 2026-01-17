@@ -33,12 +33,15 @@ export async function loadEnvFile(): Promise<void> {
   }
 }
 
+export type Verbosity = 'quiet' | 'normal' | 'verbose';
+
 export interface CLIArgs {
   prompt: string[];
   model?: string;
   systemPrompt?: string;
   help: boolean;
   version: boolean;
+  verbosity: Verbosity;
 }
 
 export function parseArgs(args: string[]): CLIArgs {
@@ -46,6 +49,7 @@ export function parseArgs(args: string[]): CLIArgs {
     prompt: [],
     help: false,
     version: false,
+    verbosity: 'normal',
   };
 
   let i = 0;
@@ -54,12 +58,16 @@ export function parseArgs(args: string[]): CLIArgs {
 
     if (arg === '-h' || arg === '--help') {
       result.help = true;
-    } else if (arg === '-v' || arg === '--version') {
+    } else if (arg === '-V' || arg === '--version') {
       result.version = true;
     } else if (arg === '-m' || arg === '--model') {
       result.model = args[++i];
     } else if (arg === '-s' || arg === '--system') {
       result.systemPrompt = args[++i];
+    } else if (arg === '-v' || arg === '--verbose') {
+      result.verbosity = 'verbose';
+    } else if (arg === '-q' || arg === '--quiet') {
+      result.verbosity = 'quiet';
     } else if (!arg.startsWith('-')) {
       result.prompt.push(arg);
     }
@@ -81,8 +89,10 @@ Usage:
 Options:
   -m, --model <provider:model>  Specify provider and model (e.g., openai:gpt-4o)
   -s, --system <prompt>         Set system prompt
+  -v, --verbose                 Show tool call outputs
+  -q, --quiet                   Hide tool calls entirely
   -h, --help                    Show this help message
-  -v, --version                 Show version
+  -V, --version                 Show version
 
 Providers:
   google      Google Gemini API (requires GOOGLE_API_KEY)
