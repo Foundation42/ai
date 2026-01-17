@@ -25,6 +25,16 @@ ai "check disk space on all my servers"
 ai "deploy the latest version to @production"
 ```
 
+## Quick Start
+
+```bash
+# Install (Linux)
+curl -fsSL https://raw.githubusercontent.com/Foundation42/ai/main/install.sh | bash
+
+# Run - it will guide you through setup!
+ai
+```
+
 ## How It's Different
 
 **Not another coding assistant.** Tools like Claude Code, GitHub Copilot, Cursor, and Codex are designed for software development—writing code, completing functions, explaining syntax.
