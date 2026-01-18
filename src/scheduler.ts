@@ -765,10 +765,53 @@ async function executeEventHook(hook: EventHook, message: string): Promise<void>
     const peerPrompt = hook.peerPrompt || `Alert from peer: ${message}`;
 
     for (const peer of fleetConfig.nodes) {
-      console.log(pc.dim(`   Notifying ${peer.name}...`));
-      await queryFleetNode(peer, peerPrompt, { fleetTLS });
+      await notifyPeerWithRetry(peer, peerPrompt, fleetTLS, 3);
     }
   }
+}
+
+/**
+ * Notify a peer with retry logic
+ */
+async function notifyPeerWithRetry(
+  peer: FleetNode,
+  prompt: string,
+  fleetTLS: ReturnType<typeof getFleetTLSConfig>,
+  maxRetries: number = 3
+): Promise<boolean> {
+  const retryDelays = [1000, 3000, 5000]; // 1s, 3s, 5s between retries
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(pc.dim(`   Notifying ${peer.name}${attempt > 1 ? ` (retry ${attempt}/${maxRetries})` : ''}...`));
+
+    try {
+      const result = await queryFleetNode(peer, prompt, { fleetTLS });
+
+      if (result.success) {
+        console.log(pc.dim(`   ${peer.name}: Notified successfully`));
+        return true;
+      }
+
+      // If it failed but we have retries left, wait and try again
+      if (attempt < maxRetries) {
+        const delay = retryDelays[attempt - 1] || 5000;
+        console.log(pc.dim(`   ${peer.name}: Failed, retrying in ${delay / 1000}s...`));
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        console.log(pc.red(`   ${peer.name}: Notification failed after ${maxRetries} attempts`));
+      }
+    } catch (err) {
+      if (attempt < maxRetries) {
+        const delay = retryDelays[attempt - 1] || 5000;
+        console.log(pc.dim(`   ${peer.name}: Error, retrying in ${delay / 1000}s...`));
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        console.log(pc.red(`   ${peer.name}: Notification error after ${maxRetries} attempts: ${err}`));
+      }
+    }
+  }
+
+  return false;
 }
 
 /**
