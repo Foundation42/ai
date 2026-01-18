@@ -177,6 +177,7 @@ ai "check the health of all production servers"
 - **Tool Execution** — AI can run bash commands, read/edit files, explore directories
 - **MCP Support** — Connect to local or remote MCP servers for extended capabilities
 - **Fleet Orchestration** — Query and manage remote servers with @ mentions
+- **Conversation Sessions** — Multi-turn debugging with remote nodes that remember context
 - **Mesh Networking** — Fleet nodes can query each other directly
 - **Scheduled Tasks** — Cron-like jobs with load-based handoff to peers
 - **Shared Memory** — Nodes store and share learnings across the mesh
@@ -931,7 +932,51 @@ To enable mesh networking, configure each node to know about its peers:
 }
 ```
 
-#### Peer-to-Peer Queries
+#### Fleet Conversation Sessions
+
+Fleet queries maintain conversation context, enabling multi-turn debugging sessions with remote nodes.
+
+**How it works:**
+- Each query to a node continues the previous conversation
+- The remote AI remembers context from earlier queries
+- Sessions expire after 5 minutes of inactivity
+- Tool visibility shows what actions the remote AI actually took
+
+**Example debugging session:**
+
+```bash
+# First query - investigate the problem
+ai "@web1 the website is down, check what's wrong"
+# Response: "I checked nginx... it's running. Let me check the app container..."
+# [Tools executed: bash, bash]
+
+# Follow-up - remote AI remembers what it already checked
+ai "@web1 try restarting the app container"
+# Response: "Restarting the container I found earlier... done. Website is back up."
+# [Tools executed: bash]
+
+# The remote AI knew which container because it remembered the first query
+```
+
+**Tool visibility:**
+
+Responses now show what tools were executed, so you know if the remote AI took action or just responded with text:
+
+```
+[Tools executed: bash, read_file, bash]   # AI ran commands
+[No tools were executed]                   # AI only responded with text
+```
+
+**Starting fresh:**
+
+To start a new conversation instead of continuing:
+
+```bash
+# Via the tool (when using programmatically)
+fleet_query(node="web1", prompt="...", new_session=true)
+```
+
+### Peer-to-Peer Queries
 
 Once configured, nodes can query each other directly:
 
