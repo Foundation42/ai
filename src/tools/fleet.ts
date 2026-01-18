@@ -19,6 +19,8 @@ function getConfig(): FleetConfig {
 }
 
 // Track active sessions per node for conversation continuity
+// NOTE: Sessions are in-memory and reset when CLI exits. If cross-invocation
+// persistence is needed later, we could store session IDs to ~/.config/ai/fleet-sessions.json
 const nodeSessions = new Map<string, string>();
 
 export class FleetQueryTool implements Tool {
