@@ -18,12 +18,16 @@ function getConfig(): FleetConfig {
   return cachedConfig;
 }
 
+// Track active sessions per node for conversation continuity
+const nodeSessions = new Map<string, string>();
+
 export class FleetQueryTool implements Tool {
   definition: ToolDefinition = {
     name: 'fleet_query',
     description: `Query a remote fleet node to execute a prompt with tools on that machine.
 Use this to ask remote servers questions, run commands, or gather information.
-The remote AI will use its local tools (bash, read_file, etc.) to answer.`,
+The remote AI will use its local tools (bash, read_file, etc.) to answer.
+Conversations with each node are maintained - follow-up queries continue the same conversation.`,
     parameters: {
       type: 'object',
       properties: {
@@ -35,6 +39,10 @@ The remote AI will use its local tools (bash, read_file, etc.) to answer.`,
           type: 'string',
           description: 'The prompt/question to send to the remote node',
         },
+        new_session: {
+          type: 'boolean',
+          description: 'Start a fresh conversation instead of continuing the previous one (default: false)',
+        },
       },
       required: ['node', 'prompt'],
     },
@@ -43,6 +51,7 @@ The remote AI will use its local tools (bash, read_file, etc.) to answer.`,
   async execute(args: Record<string, unknown>): Promise<string> {
     const nodeName = String(args.node || '').toLowerCase();
     const prompt = String(args.prompt || '');
+    const newSession = Boolean(args.new_session);
 
     if (!nodeName) {
       return 'Error: node name is required';
@@ -58,11 +67,15 @@ The remote AI will use its local tools (bash, read_file, etc.) to answer.`,
     }
 
     if (nodeName === 'all') {
-      // Query all nodes
+      // Query all nodes (no session tracking for broadcast)
       const results = await queryFleetNodes(config.nodes, prompt, { fleetTLS: config.tls });
       return results.map(r => {
         if (r.success) {
-          return `@${r.node}: ${r.response}`;
+          let response = `@${r.node}: ${r.response}`;
+          if (r.tools_executed?.length) {
+            response += `\n[tools used: ${r.tools_executed.map(t => t.name).join(', ')}]`;
+          }
+          return response;
         } else {
           return `@${r.node}: Error - ${r.error}`;
         }
@@ -76,9 +89,30 @@ The remote AI will use its local tools (bash, read_file, etc.) to answer.`,
       return `Error: Unknown node "${nodeName}". Available nodes: ${available || 'none'}`;
     }
 
-    const result = await queryFleetNode(node, prompt, { fleetTLS: config.tls });
+    // Get or clear session for this node
+    let sessionId = newSession ? undefined : nodeSessions.get(node.name);
+
+    const result = await queryFleetNode(node, prompt, {
+      fleetTLS: config.tls,
+      session_id: sessionId,
+    });
+
     if (result.success) {
-      return result.response || '(no response)';
+      // Store session for future queries
+      if (result.session_id) {
+        nodeSessions.set(node.name, result.session_id);
+      }
+
+      let response = result.response || '(no response)';
+
+      // Include tools executed info so the caller knows what actions were taken
+      if (result.tools_executed?.length) {
+        response += `\n\n[Tools executed: ${result.tools_executed.map(t => t.name).join(', ')}]`;
+      } else {
+        response += '\n\n[No tools were executed]';
+      }
+
+      return response;
     } else {
       return `Error: ${result.error}`;
     }

@@ -22,6 +22,7 @@ export interface FleetQueryResult {
   success: boolean;
   response?: string;
   tools_executed?: Array<{ name: string; result: string }>;
+  session_id?: string;  // Session ID for continuing the conversation
   error?: string;
 }
 
@@ -131,7 +132,7 @@ function buildTLSFetchOptions(node: FleetNode, fleetTLS?: FleetTLSConfig): { tls
 export async function queryFleetNode(
   node: FleetNode,
   prompt: string,
-  options: { model?: string; system?: string; fleetTLS?: FleetTLSConfig } = {}
+  options: { model?: string; system?: string; fleetTLS?: FleetTLSConfig; session_id?: string } = {}
 ): Promise<FleetQueryResult> {
   try {
     const headers: Record<string, string> = {
@@ -152,6 +153,7 @@ export async function queryFleetNode(
         prompt,
         model: options.model,
         system: options.system,
+        session_id: options.session_id,
       }),
       ...tlsOptions,
     });
@@ -169,6 +171,7 @@ export async function queryFleetNode(
       success: boolean;
       response: string;
       tools_executed?: Array<{ name: string; result: string }>;
+      session_id?: string;
       error?: { message: string };
     };
 
@@ -178,6 +181,7 @@ export async function queryFleetNode(
         success: true,
         response: data.response,
         tools_executed: data.tools_executed,
+        session_id: data.session_id,
       };
     } else {
       return {

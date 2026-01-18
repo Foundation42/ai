@@ -164,7 +164,39 @@ interface FleetExecuteRequest {
   model?: string;
   system?: string;
   tools?: boolean;  // Enable tool execution (default: true)
+  session_id?: string;  // Continue an existing conversation session
 }
+
+// ============================================
+// Session Management for Fleet Conversations
+// ============================================
+
+interface FleetSession {
+  id: string;
+  messages: Message[];
+  model?: string;
+  createdAt: number;
+  lastUsed: number;
+}
+
+const fleetSessions = new Map<string, FleetSession>();
+const SESSION_TTL = 5 * 60 * 1000; // 5 minutes
+
+function generateSessionId(): string {
+  return `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function cleanupExpiredSessions(): void {
+  const now = Date.now();
+  for (const [id, session] of fleetSessions) {
+    if (now - session.lastUsed > SESSION_TTL) {
+      fleetSessions.delete(id);
+    }
+  }
+}
+
+// Cleanup expired sessions every minute
+setInterval(cleanupExpiredSessions, 60000);
 
 export async function startServer(config: ServerConfig): Promise<void> {
   const token = config.token || process.env.AI_SERVER_TOKEN || generateToken();
@@ -455,18 +487,43 @@ async function handleNonStreamingResponse(
 
 async function handleFleetExecute(req: Request): Promise<Response> {
   const body = await req.json() as FleetExecuteRequest;
-  const { prompt, model, system, tools = true } = body;
+  const { prompt, model, system, tools = true, session_id } = body;
 
   const provider = getProvider({ model });
   const useTools = tools && provider.supportsTools;
 
-  const messages: Message[] = [];
-  // Build system prompt: config personality + tools (unless request provided their own)
-  const systemPrompt = buildSystemPrompt(system, useTools);
-  if (systemPrompt) {
-    messages.push({ role: 'system', content: systemPrompt });
+  // Check for existing session or create new one
+  let session: FleetSession | undefined;
+  let messages: Message[];
+  const now = Date.now();
+
+  if (session_id && fleetSessions.has(session_id)) {
+    // Continue existing session
+    session = fleetSessions.get(session_id)!;
+    session.lastUsed = now;
+    messages = session.messages;
+    // Add the new user message to existing conversation
+    messages.push({ role: 'user', content: prompt });
+  } else {
+    // Start new session
+    messages = [];
+    // Build system prompt: config personality + tools (unless request provided their own)
+    const systemPrompt = buildSystemPrompt(system, useTools);
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
+    // Create new session
+    session = {
+      id: session_id || generateSessionId(),
+      messages,
+      model,
+      createdAt: now,
+      lastUsed: now,
+    };
+    fleetSessions.set(session.id, session);
   }
-  messages.push({ role: 'user', content: prompt });
 
   const streamOpts: StreamOptions = {
     model: model?.includes(':') ? model.split(':').slice(1).join(':') : model,
@@ -514,10 +571,19 @@ async function handleFleetExecute(req: Request): Promise<Response> {
     streamOpts.messages = messages;
   }
 
+  // Add final assistant response to session
+  if (fullText) {
+    messages.push({ role: 'assistant', content: fullText });
+  }
+
+  // Update session
+  session.lastUsed = Date.now();
+
   return jsonResponse({
     success: true,
     response: fullText,
     tools_executed: toolResults,
+    session_id: session.id,
     provider: provider.name,
     model: model || provider.defaultModel,
   });
