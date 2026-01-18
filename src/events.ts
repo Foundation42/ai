@@ -261,7 +261,8 @@ export async function checkEventCondition(
       if (!event.service) return { triggered: false };
       const isRunning = await checkServiceStatus(event.service);
       // Only trigger on transition from running to stopped (edge detection)
-      const wasRunning = lastStatus !== false;
+      // Use lastValue (1=running, 0=stopped) for edge detection, not lastStatus
+      const wasRunning = lastValue === undefined || lastValue === 1;
       const triggered = !isRunning && wasRunning;
       return {
         triggered,
@@ -274,7 +275,8 @@ export async function checkEventCondition(
       if (!event.service) return { triggered: false };
       const isRunning = await checkServiceStatus(event.service);
       // Only trigger on transition from stopped to running
-      const wasRunning = lastStatus !== false;
+      // Use lastValue for edge detection
+      const wasRunning = lastValue === 1;
       const triggered = isRunning && !wasRunning;
       return {
         triggered,
@@ -287,7 +289,7 @@ export async function checkEventCondition(
       if (!event.file) return { triggered: false };
       const exists = checkFileExists(event.file);
       // Only trigger on transition from missing to exists
-      const wasExisting = lastStatus !== false;
+      const wasExisting = lastValue === 1;
       const triggered = exists && !wasExisting;
       return {
         triggered,
@@ -300,7 +302,7 @@ export async function checkEventCondition(
       if (!event.file) return { triggered: false };
       const exists = checkFileExists(event.file);
       // Only trigger on transition from exists to missing
-      const wasExisting = lastStatus !== false;
+      const wasExisting = lastValue === undefined || lastValue === 1;
       const triggered = !exists && wasExisting;
       return {
         triggered,
@@ -362,7 +364,7 @@ export async function checkEventCondition(
       if (!event.url) return { triggered: false };
       const isUp = await checkHttpStatus(event.url, event.expectedStatus || 200);
       // Only trigger on transition from up to down
-      const wasUp = lastStatus !== false;
+      const wasUp = lastValue === undefined || lastValue === 1;
       const triggered = !isUp && wasUp;
       return {
         triggered,
@@ -375,7 +377,7 @@ export async function checkEventCondition(
       if (!event.url) return { triggered: false };
       const isUp = await checkHttpStatus(event.url, event.expectedStatus || 200);
       // Only trigger on transition from down to up
-      const wasUp = lastStatus !== false;
+      const wasUp = lastValue === 1;
       const triggered = isUp && !wasUp;
       return {
         triggered,
@@ -388,7 +390,7 @@ export async function checkEventCondition(
       if (!event.port) return { triggered: false };
       const isOpen = await checkPortOpen(event.host || 'localhost', event.port);
       // Only trigger on transition from closed to open
-      const wasOpen = lastStatus !== false;
+      const wasOpen = lastValue === 1;
       const triggered = isOpen && !wasOpen;
       return {
         triggered,
@@ -401,7 +403,7 @@ export async function checkEventCondition(
       if (!event.port) return { triggered: false };
       const isOpen = await checkPortOpen(event.host || 'localhost', event.port);
       // Only trigger on transition from open to closed
-      const wasOpen = lastStatus !== false;
+      const wasOpen = lastValue === undefined || lastValue === 1;
       const triggered = !isOpen && wasOpen;
       return {
         triggered,
